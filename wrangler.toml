@@ -17,5 +17,5 @@ id = "64f21dad93ce4636bdc4daacd1f275bd"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "search_analytics_db"
+database_name = "analytics-be"
 database_id = "165cb9e2-49fb-40ee-b02d-58e2c5e072bb"

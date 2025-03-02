@@ -99,14 +99,14 @@ The application uses a decoupled architecture:
    # Add KV binding for token storage
    [[kv_namespaces]]
    binding = "AUTH_STORE"
-   id = "your-kv-namespace-id"
-   preview_id = "your-preview-kv-namespace-id"
+   id = "analytics-be"
+   preview_id = "64f21dad93ce4636bdc4daacd1f275bd"
 
    # Add D1 database binding
    [[d1_databases]]
    binding = "DB"
-   database_name = "search_analytics_db"
-   database_id = "your-d1-database-id"
+   database_name = "analytics-be"
+   database_id = "165cb9e2-49fb-40ee-b02d-58e2c5e072bb"
    ```
 
 7. **Set up secrets**
