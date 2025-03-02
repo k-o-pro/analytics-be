@@ -1,4 +1,5 @@
 import { verify, sign } from '@tsndr/cloudflare-worker-jwt';
+import { createHash } from 'crypto';
 
 // Handle authentication middleware
 export async function handleAuth(request, env) {
@@ -40,7 +41,7 @@ export async function handleLogin(request, env) {
   }
   
   // Verify password (in production, use bcrypt or similar)
-  const passwordValid = await verifyPassword(password, user.password_hash);
+  const passwordValid = await verifyPassword(password, user.password_hash, env.PASSWORD_SALT);
   
   if (!passwordValid) {
     return new Response('Invalid credentials', { status: 401 });
@@ -148,4 +149,16 @@ export async function refreshToken(request, env) {
   return new Response(JSON.stringify({ success: true }), {
     headers: { 'Content-Type': 'application/json' }
   });
+}
+
+// Password verification function (simple SHA-256 hash with salt)
+// Note: For production, consider using a more robust password hashing method like bcrypt
+async function verifyPassword(password, storedHash, salt) {
+  // Create a SHA-256 hash of the password with salt
+  const hash = createHash('sha256')
+    .update(password + salt)
+    .digest('hex');
+  
+  // Compare hashes
+  return hash === storedHash;
 }

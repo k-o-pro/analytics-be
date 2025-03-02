@@ -1,6 +1,5 @@
-/*
 -- Users table
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
@@ -13,7 +12,7 @@ CREATE TABLE users (
 );
 
 -- GSC data storage
-CREATE TABLE gsc_data (
+CREATE TABLE IF NOT EXISTS gsc_data (
   id INTEGER PRIMARY KEY,
   user_id INTEGER NOT NULL,
   site_url TEXT NOT NULL,
@@ -25,7 +24,7 @@ CREATE TABLE gsc_data (
 );
 
 -- Insights table
-CREATE TABLE insights (
+CREATE TABLE IF NOT EXISTS insights (
   id INTEGER PRIMARY KEY,
   user_id INTEGER NOT NULL,
   site_url TEXT NOT NULL,
@@ -37,7 +36,7 @@ CREATE TABLE insights (
 );
 
 -- Credit usage logs
-CREATE TABLE credit_logs (
+CREATE TABLE IF NOT EXISTS credit_logs (
   id INTEGER PRIMARY KEY,
   user_id INTEGER NOT NULL,
   amount INTEGER NOT NULL,
@@ -47,7 +46,7 @@ CREATE TABLE credit_logs (
 );
 
 -- User properties (GSC sites)
-CREATE TABLE user_properties (
+CREATE TABLE IF NOT EXISTS user_properties (
   id INTEGER PRIMARY KEY,
   user_id INTEGER NOT NULL,
   site_url TEXT NOT NULL,
@@ -56,8 +55,7 @@ CREATE TABLE user_properties (
   FOREIGN KEY (user_id) REFERENCES users (id)
 );
 
--- Create indexes
-CREATE INDEX idx_gsc_data_user_site ON gsc_data (user_id, site_url);
-CREATE INDEX idx_insights_user_date ON insights (user_id, date);
-CREATE INDEX idx_credit_logs_user ON credit_logs (user_id);
-*/
+-- Create indexes if they don't exist
+CREATE INDEX IF NOT EXISTS idx_gsc_data_user_site ON gsc_data (user_id, site_url);
+CREATE INDEX IF NOT EXISTS idx_insights_user_date ON insights (user_id, date);
+CREATE INDEX IF NOT EXISTS idx_credit_logs_user ON credit_logs (user_id);
