@@ -41,28 +41,27 @@ router.post('/credits/use', handleAuth, useCredits);
 // 404 handler
 router.all('*', () => new Response('Not Found', { status: 404 }));
 
-// Event listener
-addEventListener('fetch', (event) => {
-  event.respondWith(router.handle(event.request).then(corsify));
-});
+// Export Worker
+export default {
+  // Handle fetch events
+  async fetch(request, env, ctx) {
+    return router.handle(request).then(corsify);
+  },
 
-// Handle scheduled tasks
-addEventListener('scheduled', (event) => {
-  event.waitUntil(handleScheduledTask(event));
-});
-
-async function handleScheduledTask(event) {
-  // Refresh GSC data for all active users
-  const { results } = await ENV.DB.prepare(
-    'SELECT id, gsc_refresh_token FROM users WHERE gsc_connected = 1'
-  ).all();
-  
-  for (const user of results) {
-    try {
-      // Refresh token and fetch latest data
-      await refreshUserGSCData(user.id, user.gsc_refresh_token);
-    } catch (error) {
-      console.error(`Failed to refresh data for user ${user.id}:`, error);
+  // Handle scheduled tasks
+  async scheduled(event, env, ctx) {
+    // Refresh GSC data for all active users
+    const { results } = await env.DB.prepare(
+      'SELECT id, gsc_refresh_token FROM users WHERE gsc_connected = 1'
+    ).all();
+    
+    for (const user of results) {
+      try {
+        // Refresh token and fetch latest data
+        await refreshUserGSCData(user.id, user.gsc_refresh_token);
+      } catch (error) {
+        console.error(`Failed to refresh data for user ${user.id}:`, error);
+      }
     }
   }
-}
+};
