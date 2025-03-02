@@ -1,41 +1,20 @@
 name = "analytics-api"
-  main = "src/index.js"
-  compatibility_date = "2025-03-01"
+main = "src/index.js"
+compatibility_date = "2025-03-01"
 
-  [env.production]
-  workers_dev = false
-  route = "api.analytics.k-o.pro/*"
+[env.production]
+workers_dev = false
+route = "api.analytics.k-o.pro/*"
 
-  [vars]
-  FRONTEND_URL = "https://analytics.k-o.pro"
+[vars]
+FRONTEND_URL = "https://analytics.k-o.pro"
 
-  # Replace with actual IDs
-  [[kv_namespaces]]
-  binding = "AUTH_STORE"
-  id = "your-actual-kv-id"
+# Replace with actual IDs
+[[kv_namespaces]]
+binding = "AUTH_STORE"
+id = "64f21dad93ce4636bdc4daacd1f275bd"
 
-  [[d1_databases]]
-  binding = "DB"
-  database_name = "search_analytics_db"
-  database_id = "your-actual-d1-id"
-  3. Setup GitHub Action:
-  Create .github/workflows/deploy.yml:
-  name: Deploy
-  on:
-    push:
-      branches: [main]
-  jobs:
-    deploy:
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v3
-        - uses: cloudflare/wrangler-action@v3
-          with:
-            apiToken: ${{ secrets.CF_API_TOKEN }}
-            accountId: ${{ secrets.CF_ACCOUNT_ID }}
-            command: deploy --env production
-          env:
-            JWT_SECRET: ${{ secrets.JWT_SECRET }}
-            GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-            GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-            OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+[[d1_databases]]
+binding = "DB"
+database_name = "search_analytics_db"
+database_id = "165cb9e2-49fb-40ee-b02d-58e2c5e072bb"
