@@ -6,25 +6,36 @@ name = "analytics-api"
   workers_dev = false
   route = "api.analytics.k-o.pro/*"
 
-  [env.staging]
-  workers_dev = true
-
   [vars]
-  ENVIRONMENT = "production"
-  OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
   FRONTEND_URL = "https://analytics.k-o.pro"
 
-  # Add KV binding for token storage
+  # Replace with actual IDs
   [[kv_namespaces]]
   binding = "AUTH_STORE"
-  id = "your-kv-namespace-id" # Replace with actual value
-  preview_id = "your-preview-kv-namespace-id" # Replace with actual value
+  id = "your-actual-kv-id"
 
-  # Add D1 database binding
   [[d1_databases]]
   binding = "DB"
   database_name = "search_analytics_db"
-  database_id = "your-d1-database-id" # Replace with actual value
-
-  [triggers]
-  crons = ["0 0 * * *"] # Daily cron job for data refresh
+  database_id = "your-actual-d1-id"
+  3. Setup GitHub Action:
+  Create .github/workflows/deploy.yml:
+  name: Deploy
+  on:
+    push:
+      branches: [main]
+  jobs:
+    deploy:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v3
+        - uses: cloudflare/wrangler-action@v3
+          with:
+            apiToken: ${{ secrets.CF_API_TOKEN }}
+            accountId: ${{ secrets.CF_ACCOUNT_ID }}
+            command: deploy --env production
+          env:
+            JWT_SECRET: ${{ secrets.JWT_SECRET }}
+            GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+            GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+            OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
