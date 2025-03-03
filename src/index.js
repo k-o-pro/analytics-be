@@ -17,6 +17,9 @@ const { preflight, corsify } = createCors({
 // Create router
 const router = Router();
 
+// Register routes
+router.post('/auth/register', handleRegister);
+
 // CORS preflight
 router.all('*', preflight);
 

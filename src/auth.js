@@ -27,6 +27,55 @@ export async function handleAuth(request, env) {
   }
 }
 
+//Handle registration
+import { createHash } from 'crypto';
+
+export async function handleRegister(request, env) {
+  try {
+    const { name, email, password } = await request.json();
+    
+    // Check if user exists
+    const existingUser = await env.DB.prepare(
+      'SELECT id FROM users WHERE email = ?'
+    ).bind(email).first();
+    
+    if (existingUser) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Email already registered' 
+        }), 
+        { headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Hash password
+    const salt = env.PASSWORD_SALT;
+    const hash = createHash('sha256')
+      .update(password + salt)
+      .digest('hex');
+    
+    // Insert user
+    const result = await env.DB.prepare(
+      'INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)'
+    ).bind(name, email, hash).run();
+    
+    return new Response(
+      JSON.stringify({ success: true }), 
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+    
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: 'Registration failed' 
+      }), 
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+}
+
 // Handle login
 export async function handleLogin(request, env) {
   const { email, password } = await request.json();
