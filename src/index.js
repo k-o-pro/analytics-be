@@ -12,15 +12,14 @@ const router = Router();
 
 // Create CORS handler with appropriate origins
 const { preflight, corsify } = createCors({
-  origins: ['https://analytics.k-o.pro', 'http://localhost:3000'], // Added localhost for development
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  // Added OPTIONS explicitly
+  origins: ['https://analytics.k-o.pro', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   maxAge: 86400,
   credentials: true,
 });
 
 // CORS preflight - this handles OPTIONS requests
 router.options('*', preflight);  // Changed from router.all to router.options for preflight
-router.all('*', preflight);      // Keep this for backward compatibility
 
 // Register routes - note that all routes need to be processed by the router
 router.post('/auth/register', handleRegister);
@@ -75,11 +74,8 @@ async function refreshUserGSCData(userId, refreshToken, env) {
 export default {
   fetch: async (request, env, ctx) => {
     try {
-      // Important: Always wrap the router.handle with corsify
       return corsify(await router.handle(request, env, ctx));
     } catch (error) {
-      // Add error handling to ensure we always return a response
-      console.error("Error processing request:", error);
       return corsify(new Response(JSON.stringify({ 
         error: "Internal server error", 
         message: error.message 
