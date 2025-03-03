@@ -9,16 +9,22 @@ import { getCredits, useCredits } from './credits';
 
 // Create CORS handler
 const { preflight, corsify } = createCors({
-  origins: [env => env.FRONTEND_URL],
+  origins: ['*'], // For development. In production, use specific origin
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  maxAge: 86400,
+  headers: {
+    'Access-Control-Allow-Origin': '*',
+    'Content-Type': 'application/json'
+  }
 });
+
+// Update the router to use corsify
+router.post('/auth/register', corsify(handleRegister));
 
 // Create router
 const router = Router();
 
 // Register routes
-router.post('/auth/register', handleRegister);
+router.post('/auth/register', corsify(handleRegister));
 
 // CORS preflight
 router.all('*', preflight);

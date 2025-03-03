@@ -32,7 +32,12 @@ export async function handleRegister(request, env) {
   try {
     const { name, email, password } = await request.json();
     
-    // Check if user exists
+    // Add CORS headers
+    const headers = {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*'
+    };
+
     const existingUser = await env.DB.prepare(
       'SELECT id FROM users WHERE email = ?'
     ).bind(email).first();
@@ -43,7 +48,7 @@ export async function handleRegister(request, env) {
           success: false, 
           error: 'Email already registered' 
         }), 
-        { headers: { 'Content-Type': 'application/json' } }
+        { headers }
       );
     }
     
@@ -60,16 +65,18 @@ export async function handleRegister(request, env) {
     
     return new Response(
       JSON.stringify({ success: true }), 
-      { headers: { 'Content-Type': 'application/json' } }
+      { headers }
     );
-    
   } catch (error) {
     return new Response(
       JSON.stringify({ 
         success: false, 
         error: 'Registration failed' 
       }), 
-      { headers: { 'Content-Type': 'application/json' } }
+      { headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }}
     );
   }
 }
