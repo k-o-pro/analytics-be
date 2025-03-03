@@ -9,10 +9,6 @@ route = "api.analytics.k-o.pro/*"
 
 [vars]
 FRONTEND_URL = "https://analytics.k-o.pro"
-JWT_SECRET = "0ff6822a5da47381532758cc7485ad206719df7fb3cbaacdd86ca3a03f4c0077"
-PASSWORD_SALT = "26edd6b2e85277ed5216a56b49f62311"
-GOOGLE_CLIENT_ID = "724601444957-h1sofo90i307cjln4ds6jbdo601t314m.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET = "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"
 
 # Replace with actual IDs
 [[kv_namespaces]]
