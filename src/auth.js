@@ -28,8 +28,6 @@ export async function handleAuth(request, env) {
 }
 
 //Handle registration
-import { createHash } from 'crypto';
-
 export async function handleRegister(request, env) {
   try {
     const { name, email, password } = await request.json();
@@ -55,9 +53,9 @@ export async function handleRegister(request, env) {
       .update(password + salt)
       .digest('hex');
     
-    // Insert user
+    // Insert user with current timestamp
     const result = await env.DB.prepare(
-      'INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)'
+      'INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, datetime())'
     ).bind(name, email, hash).run();
     
     return new Response(
