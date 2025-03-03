@@ -30,11 +30,6 @@ export async function handleAuth(request, env) {
 // Handle registration
 export async function handleRegister(request, env) {
   try {
-    // Skip processing for OPTIONS requests - will be handled by CORS preflight
-    if (request.method === 'OPTIONS') {
-      return null;
-    }
-    
     const { name, email, password } = await request.json();
     
     // Content-Type header for all responses
