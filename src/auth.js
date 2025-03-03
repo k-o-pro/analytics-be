@@ -101,11 +101,6 @@ export async function handleRegister(request, env) {
 // Handle login
 export async function handleLogin(request, env) {
   try {
-    // Skip processing for OPTIONS requests
-    if (request.method === 'OPTIONS') {
-      return null;
-    }
-    
     const { email, password } = await request.json();
     
     // Query the database for user
@@ -175,11 +170,6 @@ export async function handleLogin(request, env) {
 
 // Handle OAuth callback
 export async function handleCallback(request, env) {
-  // Skip processing for OPTIONS requests
-  if (request.method === 'OPTIONS') {
-    return null;
-  }
-  
   const { code, state } = await request.json();
   
   // Validate state to prevent CSRF
@@ -225,11 +215,6 @@ export async function handleCallback(request, env) {
 
 // Refresh GSC token
 export async function refreshToken(request, env) {
-  // Skip processing for OPTIONS requests
-  if (request.method === 'OPTIONS') {
-    return null;
-  }
-  
   const userId = request.user.user_id;
   
   // Get refresh token from database

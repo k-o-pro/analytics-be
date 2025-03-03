@@ -18,8 +18,7 @@ const { preflight, corsify } = createCors({
   credentials: true,
 });
 
-// CORS preflight - this handles OPTIONS requests
-router.options('*', preflight);  // Changed from router.all to router.options for preflight
+router.options('*', preflight);
 
 // Register routes - note that all routes need to be processed by the router
 router.post('/auth/register', handleRegister);
