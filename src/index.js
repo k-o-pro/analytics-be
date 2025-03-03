@@ -12,22 +12,17 @@ const router = Router();
 
 // Create CORS handler
 const { preflight, corsify } = createCors({
-  origins: ['*'], // For development. In production, use specific origin
+  origins: ['https://analytics.k-o.pro'], // Use your specific frontend URL
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  headers: {
-    'Access-Control-Allow-Origin': '*',
-    'Content-Type': 'application/json'
-  }
+  maxAge: 86400,
+  credentials: true,
 });
 
 // CORS preflight
 router.all('*', preflight);
 
-// Update the router to use corsify
-router.post('/auth/register', corsify(handleRegister));
-
 // Register routes
-router.post('/auth/register', corsify(handleRegister));
+router.post('/auth/register', handleRegister); // Remove corsify here
 router.post('/auth/login', handleLogin);
 
 // Auth routes
@@ -85,9 +80,8 @@ async function refreshUserGSCData(userId, refreshToken, env) {
 }
 
 export default {
-  // Handle fetch events
-  async fetch(request, env, ctx) {
-    return router.handle(request, env, ctx).then(corsify);
+  fetch: async (request, env, ctx) => {
+    return corsify(await router.handle(request, env, ctx));
   },
 
   // Handle scheduled tasks
@@ -99,7 +93,6 @@ export default {
     
     for (const user of results) {
       try {
-        // Refresh token and fetch latest data
         await refreshUserGSCData(user.id, user.gsc_refresh_token, env);
       } catch (error) {
         console.error(`Failed to refresh data for user ${user.id}:`, error);
