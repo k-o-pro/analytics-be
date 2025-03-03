@@ -7,76 +7,83 @@ import { fetchGSCData, getProperties, getTopPages } from './gsc';
 import { generateInsights, generatePageInsights } from './insights';
 import { getCredits, useCredits } from './credits';
 
+// Helper function to execute SQL safely
+async function executeSql(db, sql) {
+  try {
+    await db.prepare(sql).run();
+    return true;
+  } catch (error) {
+    console.error(`SQL execution error: ${error.message}`);
+    console.error(`SQL was: ${sql}`);
+    return false;
+  }
+}
+
 // Initialize database function - ensure tables exist
 async function initializeDatabase(env) {
   try {
-    // SQL schema to create tables
-    const schemaSQL = `
--- Users table
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY,
-  email TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  name TEXT,
-  created_at TEXT NOT NULL,
-  last_login TEXT,
-  credits INTEGER DEFAULT 5,
-  gsc_refresh_token TEXT,
-  gsc_connected INTEGER DEFAULT 0
-);
-
--- GSC data storage
-CREATE TABLE IF NOT EXISTS gsc_data (
-  id INTEGER PRIMARY KEY,
-  user_id INTEGER NOT NULL,
-  site_url TEXT NOT NULL,
-  date_range TEXT NOT NULL,
-  dimensions TEXT NOT NULL,
-  data TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users (id)
-);
-
--- Insights table
-CREATE TABLE IF NOT EXISTS insights (
-  id INTEGER PRIMARY KEY,
-  user_id INTEGER NOT NULL,
-  site_url TEXT NOT NULL,
-  date TEXT NOT NULL,
-  type TEXT NOT NULL,
-  content TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users (id)
-);
-
--- Credit usage logs
-CREATE TABLE IF NOT EXISTS credit_logs (
-  id INTEGER PRIMARY KEY,
-  user_id INTEGER NOT NULL,
-  amount INTEGER NOT NULL,
-  purpose TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users (id)
-);
-
--- User properties (GSC sites)
-CREATE TABLE IF NOT EXISTS user_properties (
-  id INTEGER PRIMARY KEY,
-  user_id INTEGER NOT NULL,
-  site_url TEXT NOT NULL,
-  display_name TEXT,
-  added_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users (id)
-);
-
--- Create indexes if they don't exist
-CREATE INDEX IF NOT EXISTS idx_gsc_data_user_site ON gsc_data (user_id, site_url);
-CREATE INDEX IF NOT EXISTS idx_insights_user_date ON insights (user_id, date);
-CREATE INDEX IF NOT EXISTS idx_credit_logs_user ON credit_logs (user_id);
-`;
+    // User table
+    await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      name TEXT,
+      created_at TEXT NOT NULL,
+      last_login TEXT,
+      credits INTEGER DEFAULT 5,
+      gsc_refresh_token TEXT,
+      gsc_connected INTEGER DEFAULT 0
+    )`);
     
-    // Execute schema SQL to create tables if they don't exist
-    await env.DB.exec(schemaSQL);
+    // GSC data table
+    await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS gsc_data (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      site_url TEXT NOT NULL,
+      date_range TEXT NOT NULL,
+      dimensions TEXT NOT NULL,
+      data TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id)
+    )`);
+
+    // Insights table
+    await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS insights (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      site_url TEXT NOT NULL,
+      date TEXT NOT NULL,
+      type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id)
+    )`);
+
+    // Credit logs table
+    await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS credit_logs (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      amount INTEGER NOT NULL,
+      purpose TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id)
+    )`);
+
+    // User properties table
+    await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS user_properties (
+      id INTEGER PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      site_url TEXT NOT NULL,
+      display_name TEXT,
+      added_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users (id)
+    )`);
+
+    // Indexes
+    await executeSql(env.DB, `CREATE INDEX IF NOT EXISTS idx_gsc_data_user_site ON gsc_data (user_id, site_url)`);
+    await executeSql(env.DB, `CREATE INDEX IF NOT EXISTS idx_insights_user_date ON insights (user_id, date)`);
+    await executeSql(env.DB, `CREATE INDEX IF NOT EXISTS idx_credit_logs_user ON credit_logs (user_id)`);
+    
     console.log("Database schema initialized successfully");
   } catch (error) {
     console.error("Error initializing database schema:", error);
@@ -88,13 +95,27 @@ const router = Router();
 
 // Create CORS handler with appropriate origins
 const { preflight, corsify } = createCors({
-  origins: ['https://analytics.k-o.pro', 'http://localhost:3000'],
+  origins: ['*'], // Allow all origins for now to troubleshoot
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   maxAge: 86400,
   credentials: true,
+  allowHeaders: ['Content-Type', 'Authorization']
 });
 
+// Handle CORS preflight requests
 router.options('*', preflight);
+
+// Root route - API health check
+router.get('/', () => {
+  return new Response(JSON.stringify({
+    status: 'ok',
+    message: 'API server is running',
+    version: '1.0.0'
+  }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' }
+  });
+});
 
 // Register routes - note that all routes need to be processed by the router
 router.post('/auth/register', handleRegister);
@@ -116,7 +137,13 @@ router.get('/credits', handleAuth, getCredits);
 router.post('/credits/use', handleAuth, useCredits);
 
 // 404 handler
-router.all('*', () => new Response('Not Found', { status: 404 }));
+router.all('*', () => new Response(JSON.stringify({
+  error: 'Not Found',
+  message: 'The requested resource does not exist'
+}), { 
+  status: 404, 
+  headers: { 'Content-Type': 'application/json' }
+}));
 
 // Function to refresh GSC data for a user
 async function refreshUserGSCData(userId, refreshToken, env) {
