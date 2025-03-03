@@ -2,7 +2,7 @@ import { Router } from 'itty-router';
 import { createCors } from 'itty-cors';
 
 // Import route handlers
-import { handleAuth, handleLogin, handleCallback, refreshToken } from './auth';
+import { handleAuth, handleLogin, handleCallback, refreshToken, handleRegister  } from './auth';
 import { fetchGSCData, getProperties, getTopPages } from './gsc';
 import { generateInsights, generatePageInsights } from './insights';
 import { getCredits, useCredits } from './credits';
