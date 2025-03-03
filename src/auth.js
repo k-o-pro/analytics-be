@@ -30,12 +30,28 @@ export async function handleAuth(request, env) {
 // Handle registration
 export async function handleRegister(request, env) {
   try {
+    // Skip processing for OPTIONS requests - will be handled by CORS preflight
+    if (request.method === 'OPTIONS') {
+      return null;
+    }
+    
     const { name, email, password } = await request.json();
     
-    // Don't add CORS headers here - they will be added by corsify in index.js
+    // Content-Type header for all responses
     const headers = {
       'Content-Type': 'application/json'
     };
+
+    // Validate required fields
+    if (!email || !password) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Email and password are required' 
+        }), 
+        { status: 400, headers }
+      );
+    }
 
     const existingUser = await env.DB.prepare(
       'SELECT id FROM users WHERE email = ?'
@@ -47,7 +63,7 @@ export async function handleRegister(request, env) {
           success: false, 
           error: 'Email already registered' 
         }), 
-        { headers }
+        { status: 409, headers }
       );
     }
     
@@ -63,16 +79,22 @@ export async function handleRegister(request, env) {
     ).bind(name, email, hash).run();
     
     return new Response(
-      JSON.stringify({ success: true }), 
-      { headers }
+      JSON.stringify({ 
+        success: true,
+        message: 'Registration successful' 
+      }), 
+      { status: 201, headers }
     );
   } catch (error) {
+    console.error('Registration error:', error);
+    
     return new Response(
       JSON.stringify({ 
         success: false, 
         error: 'Registration failed: ' + error.message 
       }), 
       { 
+        status: 500,
         headers: {
           'Content-Type': 'application/json'
         }
@@ -83,37 +105,86 @@ export async function handleRegister(request, env) {
 
 // Handle login
 export async function handleLogin(request, env) {
-  const { email, password } = await request.json();
-  
-  // Query the database for user
-  const user = await env.DB.prepare(
-    'SELECT id, email, password_hash FROM users WHERE email = ?'
-  ).bind(email).first();
-  
-  if (!user) {
-    return new Response('Invalid credentials', { status: 401 });
+  try {
+    // Skip processing for OPTIONS requests
+    if (request.method === 'OPTIONS') {
+      return null;
+    }
+    
+    const { email, password } = await request.json();
+    
+    // Query the database for user
+    const user = await env.DB.prepare(
+      'SELECT id, email, password_hash FROM users WHERE email = ?'
+    ).bind(email).first();
+    
+    if (!user) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Invalid credentials'
+        }), 
+        { 
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+    
+    // Verify password (in production, use bcrypt or similar)
+    const passwordValid = await verifyPassword(password, user.password_hash, env.PASSWORD_SALT);
+    
+    if (!passwordValid) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Invalid credentials'
+        }), 
+        { 
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+    
+    // Generate JWT token
+    const token = await sign({
+      user_id: user.id,
+      email: user.email
+    }, env.JWT_SECRET, { expiresIn: '24h' });
+    
+    return new Response(
+      JSON.stringify({ 
+        success: true,
+        token 
+      }), 
+      {
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
+  } catch (error) {
+    console.error('Login error:', error);
+    
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: 'Login failed: ' + error.message 
+      }), 
+      { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
   }
-  
-  // Verify password (in production, use bcrypt or similar)
-  const passwordValid = await verifyPassword(password, user.password_hash, env.PASSWORD_SALT);
-  
-  if (!passwordValid) {
-    return new Response('Invalid credentials', { status: 401 });
-  }
-  
-  // Generate JWT token
-  const token = await sign({
-    user_id: user.id,
-    email: user.email
-  }, env.JWT_SECRET, { expiresIn: '24h' });
-  
-  return new Response(JSON.stringify({ token }), {
-    headers: { 'Content-Type': 'application/json' }
-  });
 }
 
 // Handle OAuth callback
 export async function handleCallback(request, env) {
+  // Skip processing for OPTIONS requests
+  if (request.method === 'OPTIONS') {
+    return null;
+  }
+  
   const { code, state } = await request.json();
   
   // Validate state to prevent CSRF
@@ -159,6 +230,11 @@ export async function handleCallback(request, env) {
 
 // Refresh GSC token
 export async function refreshToken(request, env) {
+  // Skip processing for OPTIONS requests
+  if (request.method === 'OPTIONS') {
+    return null;
+  }
+  
   const userId = request.user.user_id;
   
   // Get refresh token from database
