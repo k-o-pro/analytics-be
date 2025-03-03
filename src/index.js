@@ -7,6 +7,9 @@ import { fetchGSCData, getProperties, getTopPages } from './gsc';
 import { generateInsights, generatePageInsights } from './insights';
 import { getCredits, useCredits } from './credits';
 
+// Create router
+const router = Router();
+
 // Create CORS handler
 const { preflight, corsify } = createCors({
   origins: ['*'], // For development. In production, use specific origin
@@ -17,17 +20,15 @@ const { preflight, corsify } = createCors({
   }
 });
 
+// CORS preflight
+router.all('*', preflight);
+
 // Update the router to use corsify
 router.post('/auth/register', corsify(handleRegister));
 
-// Create router
-const router = Router();
-
 // Register routes
 router.post('/auth/register', corsify(handleRegister));
-
-// CORS preflight
-router.all('*', preflight);
+router.post('/auth/login', handleLogin);
 
 // Auth routes
 router.post('/auth/login', handleLogin);
