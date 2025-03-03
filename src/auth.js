@@ -27,15 +27,14 @@ export async function handleAuth(request, env) {
   }
 }
 
-//Handle registration
+// Handle registration
 export async function handleRegister(request, env) {
   try {
     const { name, email, password } = await request.json();
     
-    // Add CORS headers
+    // Don't add CORS headers here - they will be added by corsify in index.js
     const headers = {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*'
+      'Content-Type': 'application/json'
     };
 
     const existingUser = await env.DB.prepare(
@@ -71,12 +70,13 @@ export async function handleRegister(request, env) {
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: 'Registration failed' 
+        error: 'Registration failed: ' + error.message 
       }), 
-      { headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-      }}
+      { 
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
     );
   }
 }

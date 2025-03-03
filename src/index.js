@@ -10,25 +10,22 @@ import { getCredits, useCredits } from './credits';
 // Create router
 const router = Router();
 
-// Create CORS handler
+// Create CORS handler with appropriate origins
 const { preflight, corsify } = createCors({
-  origins: ['https://analytics.k-o.pro'], // Use your specific frontend URL
+  origins: ['https://analytics.k-o.pro', 'http://localhost:3000'], // Added localhost for development
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   maxAge: 86400,
   credentials: true,
 });
 
-// CORS preflight
+// CORS preflight - this handles OPTIONS requests
 router.all('*', preflight);
 
-// Register routes
-router.post('/auth/register', handleRegister); // Remove corsify here
+// Register routes - note that all routes need to be processed by the router
+router.post('/auth/register', handleRegister);
 router.post('/auth/login', handleLogin);
-
-// Auth routes
-router.post('/auth/login', handleLogin);
-router.post('/auth/callback', handleCallback);
-router.post('/auth/refresh', refreshToken);
+router.post('/auth/callback', handleAuth, handleCallback);
+router.post('/auth/refresh', handleAuth, refreshToken);
 
 // GSC data routes
 router.get('/gsc/properties', handleAuth, getProperties);
@@ -46,7 +43,6 @@ router.post('/credits/use', handleAuth, useCredits);
 // 404 handler
 router.all('*', () => new Response('Not Found', { status: 404 }));
 
-// Export Worker
 // Function to refresh GSC data for a user
 async function refreshUserGSCData(userId, refreshToken, env) {
   // Exchange refresh token for new access token
@@ -81,6 +77,7 @@ async function refreshUserGSCData(userId, refreshToken, env) {
 
 export default {
   fetch: async (request, env, ctx) => {
+    // Important: Always wrap the router.handle with corsify
     return corsify(await router.handle(request, env, ctx));
   },
 
