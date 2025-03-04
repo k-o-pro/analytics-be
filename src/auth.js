@@ -248,6 +248,16 @@ export async function handleCallback(request, env) {
     console.log('Processing OAuth callback, code received, exchanging for token');
     console.log('Redirect URI:', `${env.FRONTEND_URL}/oauth-callback`);
     
+    // Check if user is authenticated
+    if (!request.user || !request.user.user_id) {
+      console.error('User not authenticated in OAuth callback');
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Authentication required to connect Google Search Console',
+        authRequired: true
+      }), { status: 401, headers });
+    }
+    
     // Exchange code for tokens
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -282,21 +292,33 @@ export async function handleCallback(request, env) {
     
     // Store refresh token in database (linked to user)
     const userId = request.user.user_id;
-    await env.DB.prepare(
-      'UPDATE users SET gsc_refresh_token = ?, gsc_connected = 1 WHERE id = ?'
-    ).bind(refresh_token, userId).run();
+    console.log(`Updating GSC connection for user ID: ${userId}`);
     
-    // Store access token in KV with expiration
-    await env.AUTH_STORE.put(
-      `gsc_token:${userId}`, 
-      access_token, 
-      { expirationTtl: expires_in }
-    );
-    
-    return new Response(JSON.stringify({ 
-      success: true,
-      message: 'Successfully connected to Google Search Console' 
-    }), { status: 200, headers });
+    try {
+      await env.DB.prepare(
+        'UPDATE users SET gsc_refresh_token = ?, gsc_connected = 1 WHERE id = ?'
+      ).bind(refresh_token, userId).run();
+      
+      // Store access token in KV with expiration
+      await env.AUTH_STORE.put(
+        `gsc_token:${userId}`, 
+        access_token, 
+        { expirationTtl: expires_in }
+      );
+      
+      console.log(`Successfully connected GSC for user ID: ${userId}`);
+      
+      return new Response(JSON.stringify({ 
+        success: true,
+        message: 'Successfully connected to Google Search Console' 
+      }), { status: 200, headers });
+    } catch (dbError) {
+      console.error('Database error during GSC connection:', dbError);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Failed to store GSC connection information'
+      }), { status: 500, headers });
+    }
   } catch (error) {
     console.error('OAuth callback error:', error);
     return new Response(JSON.stringify({ 
