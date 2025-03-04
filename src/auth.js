@@ -34,8 +34,24 @@ export async function handleRegister(request, env) {
     
     // Content-Type header for all responses
     const headers = {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true'
     };
+
+    // Check if JWT_SECRET and PASSWORD_SALT are defined
+    if (!env.JWT_SECRET || !env.PASSWORD_SALT) {
+      console.error('Missing JWT_SECRET or PASSWORD_SALT environment variables');
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Server configuration error'
+        }),
+        { status: 500, headers }
+      );
+    }
 
     // Validate required fields
     if (!email || !password) {
@@ -71,7 +87,7 @@ export async function handleRegister(request, env) {
     // Insert user with current timestamp
     const result = await env.DB.prepare(
       'INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, datetime())'
-    ).bind(name, email, hash).run();
+    ).bind(name || 'User', email, hash).run();
     
     return new Response(
       JSON.stringify({ 
@@ -91,7 +107,11 @@ export async function handleRegister(request, env) {
       { 
         status: 500,
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+          'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true'
         }
       }
     );
@@ -102,6 +122,27 @@ export async function handleRegister(request, env) {
 export async function handleLogin(request, env) {
   try {
     const { email, password } = await request.json();
+    
+    // Content-Type header for all responses
+    const headers = {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true'
+    };
+    
+    // Check if JWT_SECRET and PASSWORD_SALT are defined
+    if (!env.JWT_SECRET || !env.PASSWORD_SALT) {
+      console.error('Missing JWT_SECRET or PASSWORD_SALT environment variables');
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Server configuration error'
+        }),
+        { status: 500, headers }
+      );
+    }
     
     // Query the database for user
     const user = await env.DB.prepare(
@@ -114,10 +155,7 @@ export async function handleLogin(request, env) {
           success: false,
           error: 'Invalid credentials'
         }), 
-        { 
-          status: 401,
-          headers: { 'Content-Type': 'application/json' }
-        }
+        { status: 401, headers }
       );
     }
     
@@ -130,10 +168,7 @@ export async function handleLogin(request, env) {
           success: false,
           error: 'Invalid credentials'
         }), 
-        { 
-          status: 401,
-          headers: { 'Content-Type': 'application/json' }
-        }
+        { status: 401, headers }
       );
     }
     
@@ -143,14 +178,17 @@ export async function handleLogin(request, env) {
       email: user.email
     }, env.JWT_SECRET, { expiresIn: '24h' });
     
+    // Update last login timestamp
+    await env.DB.prepare(
+      'UPDATE users SET last_login = datetime() WHERE id = ?'
+    ).bind(user.id).run();
+    
     return new Response(
       JSON.stringify({ 
         success: true,
         token 
       }), 
-      {
-        headers: { 'Content-Type': 'application/json' }
-      }
+      { status: 200, headers }
     );
   } catch (error) {
     console.error('Login error:', error);
@@ -162,7 +200,13 @@ export async function handleLogin(request, env) {
       }), 
       { 
         status: 500,
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+          'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true'
+        }
       }
     );
   }
