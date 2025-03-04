@@ -182,6 +182,24 @@ export default {
         return await handleRegister(request, env);
       }
       
+      if (path === '/auth/login' && request.method === 'POST') {
+        return await handleLogin(request, env);
+      }
+      
+      if (path === '/' && request.method === 'GET') {
+        return new Response(JSON.stringify({
+          status: 'ok',
+          message: 'API server is running',
+          version: '1.0.0'
+        }), {
+          status: 200,
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          }
+        });
+      }
+      
       // If no route matches
       return new Response(
         JSON.stringify({

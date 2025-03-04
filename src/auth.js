@@ -50,21 +50,70 @@ export async function handleRegister(request, env) {
   };
 
   try {
-    // Very minimal implementation - just parse the request and return success
-    const body = await request.json();
+    // Parse the request
+    const { name, email, password } = await request.json();
     
-    return new Response(
-      JSON.stringify({ 
-        success: true,
-        message: 'Registration attempt received',
-        debug: {
-          hasDb: !!env.DB,
-          hasJwtSecret: !!env.JWT_SECRET,
-          hasPasswordSalt: !!env.PASSWORD_SALT
-        }
-      }), 
-      { status: 200, headers }
-    );
+    // Basic validation
+    if (!email || !password) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Email and password are required' 
+        }), 
+        { status: 400, headers }
+      );
+    }
+    
+    // Check for required environment variables
+    if (!env.PASSWORD_SALT) {
+      console.error('Missing PASSWORD_SALT environment variable');
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Server configuration error'
+        }),
+        { status: 500, headers }
+      );
+    }
+    
+    try {
+      // Hash the password
+      const salt = env.PASSWORD_SALT;
+      const hash = await sha256Hash(password + salt);
+      
+      // Create the user in the database
+      await env.DB.prepare(
+        'INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, datetime())'
+      ).bind(name || 'User', email, hash).run();
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          message: 'Registration successful' 
+        }), 
+        { status: 201, headers }
+      );
+    } catch (dbError) {
+      // Check for unique constraint violation (email already exists)
+      if (dbError.message && dbError.message.includes('UNIQUE constraint failed')) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            error: 'Email already registered' 
+          }), 
+          { status: 409, headers }
+        );
+      }
+      
+      console.error('Database error:', dbError);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Registration failed: Database error' 
+        }), 
+        { status: 500, headers }
+      );
+    }
   } catch (error) {
     console.error('Registration error:', error);
     
