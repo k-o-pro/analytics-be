@@ -71,9 +71,22 @@ export async function handleRegister(request, env) {
       );
     }
 
-    const existingUser = await env.DB.prepare(
-      'SELECT id FROM users WHERE email = ?'
-    ).bind(email).first();
+    // Check if user exists - wrap in try/catch to handle database errors
+    let existingUser;
+    try {
+      existingUser = await env.DB.prepare(
+        'SELECT id FROM users WHERE email = ?'
+      ).bind(email).first();
+    } catch (dbError) {
+      console.error('Database error checking existing user:', dbError);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Database error: ' + dbError.message
+        }), 
+        { status: 500, headers }
+      );
+    }
     
     if (existingUser) {
       return new Response(
@@ -91,21 +104,33 @@ export async function handleRegister(request, env) {
       .update(password + salt)
       .digest('hex');
     
-    // Insert user with current timestamp
-    const result = await env.DB.prepare(
-      'INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, datetime())'
-    ).bind(name || 'User', email, hash).run();
-    
-    return new Response(
-      JSON.stringify({ 
-        success: true,
-        message: 'Registration successful' 
-      }), 
-      { status: 201, headers }
-    );
+    // Insert user with current timestamp - wrap in try/catch
+    try {
+      const result = await env.DB.prepare(
+        'INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, datetime())'
+      ).bind(name || 'User', email, hash).run();
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          message: 'Registration successful' 
+        }), 
+        { status: 201, headers }
+      );
+    } catch (insertError) {
+      console.error('Database error inserting user:', insertError);
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Database error: ' + insertError.message
+        }), 
+        { status: 500, headers }
+      );
+    }
   } catch (error) {
     console.error('Registration error:', error);
     
+    // Ensure we always return a response even on unexpected errors
     return new Response(
       JSON.stringify({ 
         success: false, 

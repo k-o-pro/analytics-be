@@ -11,19 +11,26 @@ import { getCredits, useCredits } from './credits';
 async function executeSql(db, sql) {
   try {
     await db.prepare(sql).run();
-    return true;
+    return { success: true };
   } catch (error) {
     console.error(`SQL execution error: ${error.message}`);
     console.error(`SQL was: ${sql}`);
-    return false;
+    return { success: false, error };
   }
 }
 
 // Initialize database function - ensure tables exist
 async function initializeDatabase(env) {
   try {
+    if (!env.DB) {
+      console.error("Database binding is missing");
+      return { success: false, error: new Error("Database binding is missing") };
+    }
+
+    console.log("Starting database initialization");
+    
     // User table
-    await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS users (
+    const userTableResult = await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY,
       email TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
@@ -35,8 +42,13 @@ async function initializeDatabase(env) {
       gsc_connected INTEGER DEFAULT 0
     )`);
     
+    if (!userTableResult.success) {
+      console.error("Failed to create users table:", userTableResult.error);
+      return { success: false, error: userTableResult.error };
+    }
+    
     // GSC data table
-    await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS gsc_data (
+    const gscTableResult = await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS gsc_data (
       id INTEGER PRIMARY KEY,
       user_id INTEGER NOT NULL,
       site_url TEXT NOT NULL,
@@ -46,9 +58,14 @@ async function initializeDatabase(env) {
       created_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users (id)
     )`);
+    
+    if (!gscTableResult.success) {
+      console.error("Failed to create gsc_data table:", gscTableResult.error);
+      return { success: false, error: gscTableResult.error };
+    }
 
     // Insights table
-    await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS insights (
+    const insightsTableResult = await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS insights (
       id INTEGER PRIMARY KEY,
       user_id INTEGER NOT NULL,
       site_url TEXT NOT NULL,
@@ -58,9 +75,14 @@ async function initializeDatabase(env) {
       created_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users (id)
     )`);
+    
+    if (!insightsTableResult.success) {
+      console.error("Failed to create insights table:", insightsTableResult.error);
+      return { success: false, error: insightsTableResult.error };
+    }
 
     // Credit logs table
-    await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS credit_logs (
+    const creditLogsTableResult = await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS credit_logs (
       id INTEGER PRIMARY KEY,
       user_id INTEGER NOT NULL,
       amount INTEGER NOT NULL,
@@ -68,9 +90,14 @@ async function initializeDatabase(env) {
       created_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users (id)
     )`);
+    
+    if (!creditLogsTableResult.success) {
+      console.error("Failed to create credit_logs table:", creditLogsTableResult.error);
+      return { success: false, error: creditLogsTableResult.error };
+    }
 
     // User properties table
-    await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS user_properties (
+    const userPropertiesTableResult = await executeSql(env.DB, `CREATE TABLE IF NOT EXISTS user_properties (
       id INTEGER PRIMARY KEY,
       user_id INTEGER NOT NULL,
       site_url TEXT NOT NULL,
@@ -78,6 +105,11 @@ async function initializeDatabase(env) {
       added_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users (id)
     )`);
+    
+    if (!userPropertiesTableResult.success) {
+      console.error("Failed to create user_properties table:", userPropertiesTableResult.error);
+      return { success: false, error: userPropertiesTableResult.error };
+    }
 
     // Indexes
     await executeSql(env.DB, `CREATE INDEX IF NOT EXISTS idx_gsc_data_user_site ON gsc_data (user_id, site_url)`);
@@ -85,8 +117,10 @@ async function initializeDatabase(env) {
     await executeSql(env.DB, `CREATE INDEX IF NOT EXISTS idx_credit_logs_user ON credit_logs (user_id)`);
     
     console.log("Database schema initialized successfully");
+    return { success: true };
   } catch (error) {
     console.error("Error initializing database schema:", error);
+    return { success: false, error };
   }
 }
 
@@ -180,15 +214,14 @@ export default {
       // Check if all required environment variables are present
       const requiredVars = ['JWT_SECRET', 'PASSWORD_SALT', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'];
       const missingVars = requiredVars.filter(v => !env[v]);
-            
+      
       if (missingVars.length > 0) {
         console.error(`Missing required environment variables: ${missingVars.join(', ')}`);
         return new Response(JSON.stringify({
           error: "Server configuration error",
-          message: "The server is missing required configuration. Please contact the administrator."
+          message: `The server is missing required configuration: ${missingVars.join(', ')}`
         }), {
           status: 500,
-
           headers: { 
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
@@ -200,7 +233,24 @@ export default {
       }
       
       // Initialize database before handling any request
-      await initializeDatabase(env);
+      const initResult = await initializeDatabase(env);
+      
+      if (!initResult.success) {
+        console.error("Failed to initialize database:", initResult.error);
+        return new Response(JSON.stringify({
+          error: "Database initialization error",
+          message: initResult.error.message
+        }), {
+          status: 500,
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+            'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true'
+          }
+        });
+      }
       
       // Handle OPTIONS requests directly for CORS
       if (request.method === 'OPTIONS') {
@@ -216,8 +266,34 @@ export default {
         });
       }
       
-      // Handle the request
-      const response = await router.handle(request, env, ctx);
+      // Handle the request with a promise timeout to prevent hanging
+      const routerPromise = router.handle(request, env, ctx);
+      
+      // Set a timeout to ensure we don't hang indefinitely
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Request timeout - router did not respond in time'));
+        }, 5000); // 5 second timeout
+      });
+      
+      // Race between router and timeout
+      const response = await Promise.race([routerPromise, timeoutPromise])
+        .catch(error => {
+          console.error("Router error:", error);
+          return new Response(JSON.stringify({
+            error: "Route processing error",
+            message: error.message
+          }), {
+            status: 500,
+            headers: { 
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+              'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+              'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+              'Access-Control-Allow-Credentials': 'true'
+            }
+          });
+        });
       
       // If no response was generated, create a default one
       if (!response) {
