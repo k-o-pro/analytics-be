@@ -177,6 +177,62 @@ export default {
     const path = url.pathname;
     
     try {
+      // Initialize database on every request
+      await initializeDatabase(env);
+      
+      // Check for required environment variables
+      const requiredVars = ['JWT_SECRET', 'PASSWORD_SALT', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'];
+      const missingVars = requiredVars.filter(v => !env[v]);
+      
+      if (missingVars.length > 0) {
+        console.error(`Missing required environment variables: ${missingVars.join(', ')}`);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Server configuration error',
+          message: 'The server is missing required configuration.'
+        }), {
+          status: 500,
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          }
+        });
+      }
+      
+      // Authentication check for protected routes
+      let user = null;
+      if (path !== '/auth/register' && path !== '/auth/login' && path !== '/') {
+        const authHeader = request.headers.get('Authorization');
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          const token = authHeader.split(' ')[1];
+          try {
+            const verified = await jwt.verify(token, env.JWT_SECRET);
+            if (verified) {
+              user = verified.payload;
+              // Attach user to request object
+              request.user = user;
+            }
+          } catch (error) {
+            console.error('JWT verification error:', error);
+          }
+        }
+        
+        // Return unauthorized if not authenticated for protected routes
+        if (!user && path !== '/auth/callback') {
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Unauthorized',
+            message: 'Authentication required'
+          }), {
+            status: 401,
+            headers: {
+              'Content-Type': 'application/json',
+              ...corsHeaders
+            }
+          });
+        }
+      }
+      
       // Direct path matching for key endpoints
       if (path === '/auth/register' && request.method === 'POST') {
         return await handleRegister(request, env);
@@ -186,6 +242,46 @@ export default {
         return await handleLogin(request, env);
       }
       
+      if (path === '/auth/callback' && request.method === 'POST') {
+        return await handleCallback(request, env);
+      }
+      
+      if (path === '/auth/refresh' && request.method === 'POST') {
+        return await refreshToken(request, env);
+      }
+      
+      // GSC data routes
+      if (path === '/gsc/properties' && request.method === 'GET') {
+        return await getProperties(request, env);
+      }
+      
+      if (path === '/gsc/data' && request.method === 'POST') {
+        return await fetchGSCData(request, env);
+      }
+      
+      if (path === '/gsc/top-pages' && request.method === 'GET') {
+        return await getTopPages(request, env);
+      }
+      
+      // Analytics & insights routes
+      if (path === '/insights/generate' && request.method === 'POST') {
+        return await generateInsights(request, env);
+      }
+      
+      if (path.startsWith('/insights/page/') && request.method === 'POST') {
+        return await generatePageInsights(request, env);
+      }
+      
+      // Credits management
+      if (path === '/credits' && request.method === 'GET') {
+        return await getCredits(request, env);
+      }
+      
+      if (path === '/credits/use' && request.method === 'POST') {
+        return await useCredits(request, env);
+      }
+      
+      // Root path for health check
       if (path === '/' && request.method === 'GET') {
         return new Response(JSON.stringify({
           status: 'ok',

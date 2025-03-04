@@ -223,47 +223,96 @@ export async function handleLogin(request, env) {
 
 // Handle OAuth callback
 export async function handleCallback(request, env) {
-  const { code, state } = await request.json();
-  
-  // Validate state to prevent CSRF
-  // In production, verify state matches a stored value
-  
-  // Exchange code for tokens
-  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: `${env.FRONTEND_URL}/oauth-callback`,
-      grant_type: 'authorization_code'
-    })
-  });
-  
-  if (!tokenResponse.ok) {
-    const error = await tokenResponse.text();
-    return new Response(`OAuth error: ${error}`, { status: 400 });
+  try {
+    const { code, state } = await request.json();
+    
+    // Headers for the response with CORS
+    const headers = {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true'
+    };
+    
+    // Validate required parameters
+    if (!code) {
+      console.error('Missing authorization code in request');
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Missing authorization code'
+      }), { status: 400, headers });
+    }
+    
+    // Log OAuth debug information
+    console.log('Processing OAuth callback, code received, exchanging for token');
+    console.log('Redirect URI:', `${env.FRONTEND_URL}/oauth-callback`);
+    
+    // Exchange code for tokens
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: env.GOOGLE_CLIENT_ID,
+        client_secret: env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: `${env.FRONTEND_URL}/oauth-callback`,
+        grant_type: 'authorization_code'
+      })
+    });
+    
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error('OAuth token exchange error:', errorText);
+      return new Response(JSON.stringify({
+        success: false,
+        error: `OAuth error: ${errorText}`
+      }), { status: 400, headers });
+    }
+    
+    const { access_token, refresh_token, expires_in } = await tokenResponse.json();
+    
+    if (!refresh_token) {
+      console.error('No refresh token returned from Google OAuth');
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'No refresh token received from Google'
+      }), { status: 400, headers });
+    }
+    
+    // Store refresh token in database (linked to user)
+    const userId = request.user.user_id;
+    await env.DB.prepare(
+      'UPDATE users SET gsc_refresh_token = ?, gsc_connected = 1 WHERE id = ?'
+    ).bind(refresh_token, userId).run();
+    
+    // Store access token in KV with expiration
+    await env.AUTH_STORE.put(
+      `gsc_token:${userId}`, 
+      access_token, 
+      { expirationTtl: expires_in }
+    );
+    
+    return new Response(JSON.stringify({ 
+      success: true,
+      message: 'Successfully connected to Google Search Console' 
+    }), { status: 200, headers });
+  } catch (error) {
+    console.error('OAuth callback error:', error);
+    return new Response(JSON.stringify({ 
+      success: false, 
+      error: 'OAuth callback failed: ' + error.message 
+    }), { 
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Credentials': 'true'
+      }
+    });
   }
-  
-  const { access_token, refresh_token, expires_in } = await tokenResponse.json();
-  
-  // Store refresh token in database (linked to user)
-  const userId = request.user.user_id;
-  await env.DB.prepare(
-    'UPDATE users SET gsc_refresh_token = ?, gsc_connected = 1 WHERE id = ?'
-  ).bind(refresh_token, userId).run();
-  
-  // Store access token in KV with expiration
-  await env.AUTH_STORE.put(
-    `gsc_token:${userId}`, 
-    access_token, 
-    { expirationTtl: expires_in }
-  );
-  
-  return new Response(JSON.stringify({ success: true }), {
-    headers: { 'Content-Type': 'application/json' }
-  });
 }
 
 // Refresh GSC token
