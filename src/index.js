@@ -2,7 +2,6 @@
 import { Router } from 'itty-router';
 import jwt from '@tsndr/cloudflare-worker-jwt';
 import { createHash } from 'crypto';
-import { OAuth2Client } from 'google-auth-library';
 import { createCors } from 'itty-cors';
 
 // Import route handlers
