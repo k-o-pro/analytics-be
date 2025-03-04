@@ -180,7 +180,7 @@ export default {
       // Check if all required environment variables are present
       const requiredVars = ['JWT_SECRET', 'PASSWORD_SALT', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'];
       const missingVars = requiredVars.filter(v => !env[v]);
-      
+            
       if (missingVars.length > 0) {
         console.error(`Missing required environment variables: ${missingVars.join(', ')}`);
         return new Response(JSON.stringify({
@@ -188,6 +188,7 @@ export default {
           message: "The server is missing required configuration. Please contact the administrator."
         }), {
           status: 500,
+
           headers: { 
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',

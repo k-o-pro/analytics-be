@@ -41,6 +41,13 @@ export async function handleRegister(request, env) {
       'Access-Control-Allow-Credentials': 'true'
     };
 
+    // Debug logging
+    console.log('Registration attempt:', { email, hasPassword: !!password });
+    console.log('Environment check:', { 
+      hasJwtSecret: !!env.JWT_SECRET, 
+      hasPasswordSalt: !!env.PASSWORD_SALT 
+    });
+
     // Check if JWT_SECRET and PASSWORD_SALT are defined
     if (!env.JWT_SECRET || !env.PASSWORD_SALT) {
       console.error('Missing JWT_SECRET or PASSWORD_SALT environment variables');
