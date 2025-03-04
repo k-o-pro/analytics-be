@@ -40,7 +40,7 @@ export async function handleAuth(request, env) {
 
 // Handle registration
 export async function handleRegister(request, env) {
-  // Content-Type header for all responses
+  // Basic headers for all responses
   const headers = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
@@ -50,91 +50,28 @@ export async function handleRegister(request, env) {
   };
 
   try {
-    // Check if DB is available
-    if (!env.DB) {
-      console.error('Database binding is missing');
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Database configuration error'
-        }),
-        { status: 500, headers }
-      );
-    }
-
-    // Check environment variables
-    if (!env.JWT_SECRET || !env.PASSWORD_SALT) {
-      console.error('Missing JWT_SECRET or PASSWORD_SALT environment variables');
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Server configuration error'
-        }),
-        { status: 500, headers }
-      );
-    }
-
-    // Parse request body
-    const { name, email, password } = await request.json();
+    // Very minimal implementation - just parse the request and return success
+    const body = await request.json();
     
-    // Basic validation
-    if (!email || !password) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Email and password are required' 
-        }), 
-        { status: 400, headers }
-      );
-    }
-    
-    try {
-      // Create a test user with minimal DB interaction
-      const salt = env.PASSWORD_SALT;
-      const hash = await sha256Hash(password + salt);
-      
-      // Create a simple statement that will run quickly
-      const stmt = env.DB.prepare(
-        'INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, datetime())'
-      );
-      
-      const result = await stmt.bind(name || 'User', email, hash).run();
-      
-      return new Response(
-        JSON.stringify({ 
-          success: true,
-          message: 'Registration successful' 
-        }), 
-        { status: 201, headers }
-      );
-    } catch (dbError) {
-      // Check specific error codes for SQLite
-      if (dbError.message && dbError.message.includes('UNIQUE constraint failed')) {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: 'Email already registered' 
-          }), 
-          { status: 409, headers }
-        );
-      }
-      
-      console.error('Database error:', dbError);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Registration failed: Database error' 
-        }), 
-        { status: 500, headers }
-      );
-    }
+    return new Response(
+      JSON.stringify({ 
+        success: true,
+        message: 'Registration attempt received',
+        debug: {
+          hasDb: !!env.DB,
+          hasJwtSecret: !!env.JWT_SECRET,
+          hasPasswordSalt: !!env.PASSWORD_SALT
+        }
+      }), 
+      { status: 200, headers }
+    );
   } catch (error) {
     console.error('Registration error:', error);
     
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: 'Registration failed: ' + error.message 
+        error: 'Registration error: ' + error.message 
       }), 
       { status: 500, headers }
     );

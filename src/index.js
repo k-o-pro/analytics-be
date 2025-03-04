@@ -171,166 +171,33 @@ export default {
         headers: corsHeaders,
       });
     }
-
-    // Create a response promise that will be resolved by the router
-    // or by the timeout handler
-    let responseResolve;
-    const responsePromise = new Promise(resolve => {
-      responseResolve = resolve;
-    });
-
-    // Set a timeout for the request
-    const timeoutId = setTimeout(() => {
-      responseResolve(
-        new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Request processing timeout',
-          }),
-          {
-            status: 504,
-            headers: {
-              'Content-Type': 'application/json',
-              ...corsHeaders,
-            },
-          }
-        )
-      );
-    }, 25000); // 25 second timeout - adjusted from 30 for Cloudflare's limits
-
-    // Initialize database and process the request
+    
+    // Very simple router implementation
+    const url = new URL(request.url);
+    const path = url.pathname;
+    
     try {
-      const db = env.DB;
-      
-      // Check if DB is available before proceeding
-      if (!db) {
-        clearTimeout(timeoutId);
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Database unavailable',
-          }),
-          {
-            status: 500,
-            headers: {
-              'Content-Type': 'application/json',
-              ...corsHeaders,
-            },
-          }
-        );
+      // Direct path matching for key endpoints
+      if (path === '/auth/register' && request.method === 'POST') {
+        return await handleRegister(request, env);
       }
       
-      const url = new URL(request.url);
-      const path = url.pathname;
-
-      // Initialize the router
-      const router = Router();
-      
-      // Auth routes
-      router.post('/auth/register', async (req) => await handleRegister(req, env));
-      router.post('/auth/login', async (req) => await handleLogin(req, env));
-      router.post('/auth/callback', async (req) => await handleCallback(req, env));
-      router.post('/auth/refresh', async (req) => await refreshToken(req, env));
-
-      // GSC data routes
-      router.get('/gsc/properties', async (req) => {
-        const authResult = await handleAuth(req, env);
-        if (authResult.status !== 200) return authResult;
-        return await getProperties(req, env);
-      });
-      
-      router.post('/gsc/data', async (req) => {
-        const authResult = await handleAuth(req, env);
-        if (authResult.status !== 200) return authResult;
-        return await fetchGSCData(req, env);
-      });
-      
-      router.get('/gsc/top-pages', async (req) => {
-        const authResult = await handleAuth(req, env);
-        if (authResult.status !== 200) return authResult;
-        return await getTopPages(req, env);
-      });
-
-      // Analytics & insights routes
-      router.post('/insights/generate', async (req) => {
-        const authResult = await handleAuth(req, env);
-        if (authResult.status !== 200) return authResult;
-        return await generateInsights(req, env);
-      });
-      
-      router.post('/insights/page/:url', async (req) => {
-        const authResult = await handleAuth(req, env);
-        if (authResult.status !== 200) return authResult;
-        return await generatePageInsights(req, env);
-      });
-
-      // Credits management
-      router.get('/credits', async (req) => {
-        const authResult = await handleAuth(req, env);
-        if (authResult.status !== 200) return authResult;
-        return await getCredits(req, env);
-      });
-      
-      router.post('/credits/use', async (req) => {
-        const authResult = await handleAuth(req, env);
-        if (authResult.status !== 200) return authResult;
-        return await useCredits(req, env);
-      });
-      
-      // Root route - API health check
-      router.get('/', () => {
-        return new Response(JSON.stringify({
-          status: 'ok',
-          message: 'API server is running',
-          version: '1.0.0'
-        }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      });
-      
-      // 404 handler for all other routes
-      router.all('*', () => new Response(JSON.stringify({
-        error: 'Not Found',
-        message: 'The requested resource does not exist'
-      }), { 
-        status: 404, 
-        headers: { 
-          'Content-Type': 'application/json',
-          ...corsHeaders 
+      // If no route matches
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Not found',
+          path: path
+        }),
+        {
+          status: 404,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
         }
-      }));
-
-      // Handle the request with the router and resolve the response promise
-      router.handle(request).then(response => {
-        clearTimeout(timeoutId);
-        responseResolve(response);
-      }).catch(error => {
-        console.error('Router error:', error);
-        clearTimeout(timeoutId);
-        responseResolve(
-          new Response(
-            JSON.stringify({
-              success: false,
-              error: 'Router error: ' + error.message,
-            }),
-            {
-              status: 500,
-              headers: {
-                'Content-Type': 'application/json',
-                ...corsHeaders,
-              },
-            }
-          )
-        );
-      });
-
-      // Wait for either the router to resolve or the timeout to fire
-      return await responsePromise;
+      );
     } catch (error) {
-      // Clear the timeout to prevent memory leaks
-      clearTimeout(timeoutId);
-      
       console.error('Unhandled exception:', error);
       
       // Return a generic error response
@@ -363,9 +230,6 @@ export default {
       
       // Add scheduled tasks here
       console.log("Running scheduled task at", event.cron);
-      
-      // Example: Refresh GSC data for all users
-      // Implementation depends on your specific requirements
     } catch (error) {
       console.error("Error in scheduled task:", error);
     }
