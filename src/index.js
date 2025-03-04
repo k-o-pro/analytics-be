@@ -1,4 +1,8 @@
+// Import required modules
 import { Router } from 'itty-router';
+import jwt from '@tsndr/cloudflare-worker-jwt';
+import { createHash } from 'crypto';
+import { OAuth2Client } from 'google-auth-library';
 import { createCors } from 'itty-cors';
 
 // Import route handlers
@@ -124,62 +128,6 @@ async function initializeDatabase(env) {
   }
 }
 
-// Create router
-const router = Router();
-
-// Create CORS handler with appropriate origins
-const { preflight, corsify } = createCors({
-  origins: ['https://analytics.k-o.pro', 'http://localhost:3000'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  maxAge: 86400,
-  credentials: true,
-  allowHeaders: ['Content-Type', 'Authorization'],
-  allowCredentials: true,
-});
-
-// Handle CORS preflight requests
-router.options('*', preflight);
-
-// Root route - API health check
-router.get('/', () => {
-  return new Response(JSON.stringify({
-    status: 'ok',
-    message: 'API server is running',
-    version: '1.0.0'
-  }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' }
-  });
-});
-
-// Register routes - note that all routes need to be processed by the router
-router.post('/auth/register', handleRegister);
-router.post('/auth/login', handleLogin);
-router.post('/auth/callback', handleAuth, handleCallback);
-router.post('/auth/refresh', handleAuth, refreshToken);
-
-// GSC data routes
-router.get('/gsc/properties', handleAuth, getProperties);
-router.post('/gsc/data', handleAuth, fetchGSCData);
-router.get('/gsc/top-pages', handleAuth, getTopPages);
-
-// Analytics & insights routes
-router.post('/insights/generate', handleAuth, generateInsights);
-router.post('/insights/page/:url', handleAuth, generatePageInsights);
-
-// Credits management
-router.get('/credits', handleAuth, getCredits);
-router.post('/credits/use', handleAuth, useCredits);
-
-// 404 handler
-router.all('*', () => new Response(JSON.stringify({
-  error: 'Not Found',
-  message: 'The requested resource does not exist'
-}), { 
-  status: 404, 
-  headers: { 'Content-Type': 'application/json' }
-}));
-
 // Function to refresh GSC data for a user
 async function refreshUserGSCData(userId, refreshToken, env) {
   // Exchange refresh token for new access token
@@ -209,151 +157,219 @@ async function refreshUserGSCData(userId, refreshToken, env) {
 }
 
 export default {
-  fetch: async (request, env, ctx) => {
-    try {
-      // Check if all required environment variables are present
-      const requiredVars = ['JWT_SECRET', 'PASSWORD_SALT', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'];
-      const missingVars = requiredVars.filter(v => !env[v]);
-      
-      if (missingVars.length > 0) {
-        console.error(`Missing required environment variables: ${missingVars.join(', ')}`);
-        return new Response(JSON.stringify({
-          error: "Server configuration error",
-          message: `The server is missing required configuration: ${missingVars.join(', ')}`
-        }), {
-          status: 500,
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-            'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Allow-Credentials': 'true'
+  async fetch(request, env, ctx) {
+    // Define common headers for CORS support
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+    };
+
+    // Handle preflight OPTIONS request
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 204,
+        headers: corsHeaders,
+      });
+    }
+
+    // Create a response promise that will be resolved by the router
+    // or by the timeout handler
+    let responseResolve;
+    const responsePromise = new Promise(resolve => {
+      responseResolve = resolve;
+    });
+
+    // Set a timeout for the request
+    const timeoutId = setTimeout(() => {
+      responseResolve(
+        new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Request processing timeout',
+          }),
+          {
+            status: 504,
+            headers: {
+              'Content-Type': 'application/json',
+              ...corsHeaders,
+            },
           }
-        });
+        )
+      );
+    }, 25000); // 25 second timeout - adjusted from 30 for Cloudflare's limits
+
+    // Initialize database and process the request
+    try {
+      const db = env.DB;
+      
+      // Check if DB is available before proceeding
+      if (!db) {
+        clearTimeout(timeoutId);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Database unavailable',
+          }),
+          {
+            status: 500,
+            headers: {
+              'Content-Type': 'application/json',
+              ...corsHeaders,
+            },
+          }
+        );
       }
       
-      // Initialize database before handling any request
+      const url = new URL(request.url);
+      const path = url.pathname;
+
+      // Initialize the router
+      const router = new Router();
+      
+      // Auth routes
+      router.post('/auth/register', async (req) => await handleRegister(req, env));
+      router.post('/auth/login', async (req) => await handleLogin(req, env));
+      router.post('/auth/callback', async (req) => await handleCallback(req, env));
+      router.post('/auth/refresh', async (req) => await refreshToken(req, env));
+
+      // GSC data routes
+      router.get('/gsc/properties', async (req) => {
+        const authResult = await handleAuth(req, env);
+        if (authResult.status !== 200) return authResult;
+        return await getProperties(req, env);
+      });
+      
+      router.post('/gsc/data', async (req) => {
+        const authResult = await handleAuth(req, env);
+        if (authResult.status !== 200) return authResult;
+        return await fetchGSCData(req, env);
+      });
+      
+      router.get('/gsc/top-pages', async (req) => {
+        const authResult = await handleAuth(req, env);
+        if (authResult.status !== 200) return authResult;
+        return await getTopPages(req, env);
+      });
+
+      // Analytics & insights routes
+      router.post('/insights/generate', async (req) => {
+        const authResult = await handleAuth(req, env);
+        if (authResult.status !== 200) return authResult;
+        return await generateInsights(req, env);
+      });
+      
+      router.post('/insights/page/:url', async (req) => {
+        const authResult = await handleAuth(req, env);
+        if (authResult.status !== 200) return authResult;
+        return await generatePageInsights(req, env);
+      });
+
+      // Credits management
+      router.get('/credits', async (req) => {
+        const authResult = await handleAuth(req, env);
+        if (authResult.status !== 200) return authResult;
+        return await getCredits(req, env);
+      });
+      
+      router.post('/credits/use', async (req) => {
+        const authResult = await handleAuth(req, env);
+        if (authResult.status !== 200) return authResult;
+        return await useCredits(req, env);
+      });
+      
+      // Root route - API health check
+      router.get('/', () => {
+        return new Response(JSON.stringify({
+          status: 'ok',
+          message: 'API server is running',
+          version: '1.0.0'
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      });
+      
+      // 404 handler for all other routes
+      router.all('*', () => new Response(JSON.stringify({
+        error: 'Not Found',
+        message: 'The requested resource does not exist'
+      }), { 
+        status: 404, 
+        headers: { 
+          'Content-Type': 'application/json',
+          ...corsHeaders 
+        }
+      }));
+
+      // Handle the request with the router and resolve the response promise
+      router.handle(request).then(response => {
+        clearTimeout(timeoutId);
+        responseResolve(response);
+      }).catch(error => {
+        console.error('Router error:', error);
+        clearTimeout(timeoutId);
+        responseResolve(
+          new Response(
+            JSON.stringify({
+              success: false,
+              error: 'Router error: ' + error.message,
+            }),
+            {
+              status: 500,
+              headers: {
+                'Content-Type': 'application/json',
+                ...corsHeaders,
+              },
+            }
+          )
+        );
+      });
+
+      // Wait for either the router to resolve or the timeout to fire
+      return await responsePromise;
+    } catch (error) {
+      // Clear the timeout to prevent memory leaks
+      clearTimeout(timeoutId);
+      
+      console.error('Unhandled exception:', error);
+      
+      // Return a generic error response
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Server error: ' + error.message,
+        }),
+        {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
+        }
+      );
+    }
+  },
+  
+  // Handle scheduled tasks
+  async scheduled(event, env, ctx) {
+    try {
+      // Initialize database 
       const initResult = await initializeDatabase(env);
       
       if (!initResult.success) {
-        console.error("Failed to initialize database:", initResult.error);
-        return new Response(JSON.stringify({
-          error: "Database initialization error",
-          message: initResult.error.message
-        }), {
-          status: 500,
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-            'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Allow-Credentials': 'true'
-          }
-        });
+        console.error("Failed to initialize database for scheduled task:", initResult.error);
+        return;
       }
       
-      // Handle OPTIONS requests directly for CORS
-      if (request.method === 'OPTIONS') {
-        return new Response(null, { 
-          status: 204,
-          headers: {
-            'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Allow-Credentials': 'true',
-            'Access-Control-Max-Age': '86400'
-          }
-        });
-      }
+      // Add scheduled tasks here
+      console.log("Running scheduled task at", event.cron);
       
-      // Handle the request with a promise timeout to prevent hanging
-      const routerPromise = router.handle(request, env, ctx);
-      
-      // Set a timeout to ensure we don't hang indefinitely
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new Error('Request timeout - router did not respond in time'));
-        }, 5000); // 5 second timeout
-      });
-      
-      // Race between router and timeout
-      const response = await Promise.race([routerPromise, timeoutPromise])
-        .catch(error => {
-          console.error("Router error:", error);
-          return new Response(JSON.stringify({
-            error: "Route processing error",
-            message: error.message
-          }), {
-            status: 500,
-            headers: { 
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-              'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-              'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-              'Access-Control-Allow-Credentials': 'true'
-            }
-          });
-        });
-      
-      // If no response was generated, create a default one
-      if (!response) {
-        console.error("No response was generated by the router");
-        return new Response(JSON.stringify({
-          error: "Route handler did not generate a response"
-        }), {
-          status: 500,
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-            'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Allow-Credentials': 'true'
-          }
-        });
-      }
-      
-      // Ensure the response has the correct CORS headers
-      const newResponse = new Response(response.body, response);
-      
-      // Add CORS headers to the response
-      newResponse.headers.set('Access-Control-Allow-Origin', 'https://analytics.k-o.pro');
-      newResponse.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      newResponse.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      newResponse.headers.set('Access-Control-Allow-Credentials', 'true');
-      
-      return newResponse;
+      // Example: Refresh GSC data for all users
+      // Implementation depends on your specific requirements
     } catch (error) {
-      console.error("Server error:", error);
-      return new Response(JSON.stringify({ 
-        error: "Internal server error", 
-        message: error.message,
-        stack: error.stack
-      }), {
-        status: 500,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-          'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Allow-Credentials': 'true'
-        }
-      });
-    }
-  },
-
-  // Handle scheduled tasks
-  async scheduled(event, env, ctx) {
-    // Refresh GSC data for all active users
-    const { results } = await env.DB.prepare(
-      'SELECT id, gsc_refresh_token FROM users WHERE gsc_connected = 1'
-    ).all();
-    
-    for (const user of results) {
-      try {
-        await refreshUserGSCData(user.id, user.gsc_refresh_token, env);
-      } catch (error) {
-        console.error(`Failed to refresh data for user ${user.id}:`, error);
-      }
+      console.error("Error in scheduled task:", error);
     }
   }
 };
