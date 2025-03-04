@@ -1,7 +1,6 @@
 // Import required modules
 import { Router } from 'itty-router';
 import jwt from '@tsndr/cloudflare-worker-jwt';
-import { createHash } from 'crypto';
 import { createCors } from 'itty-cors';
 
 // Import route handlers
@@ -225,7 +224,7 @@ export default {
       const path = url.pathname;
 
       // Initialize the router
-      const router = new Router();
+      const router = Router();
       
       // Auth routes
       router.post('/auth/register', async (req) => await handleRegister(req, env));

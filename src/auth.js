@@ -1,5 +1,16 @@
 import { verify, sign } from '@tsndr/cloudflare-worker-jwt';
-import { createHash } from 'crypto';
+
+// Web Crypto API for hashing
+function sha256Hash(message) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(message);
+  return crypto.subtle.digest('SHA-256', data)
+    .then(buffer => {
+      return Array.from(new Uint8Array(buffer))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+    });
+}
 
 // Handle authentication middleware
 export async function handleAuth(request, env) {
@@ -80,9 +91,7 @@ export async function handleRegister(request, env) {
     try {
       // Create a test user with minimal DB interaction
       const salt = env.PASSWORD_SALT;
-      const hash = createHash('sha256')
-        .update(password + salt)
-        .digest('hex');
+      const hash = await sha256Hash(password + salt);
       
       // Create a simple statement that will run quickly
       const stmt = env.DB.prepare(
@@ -323,9 +332,7 @@ export async function refreshToken(request, env) {
 // Note: For production, consider using a more robust password hashing method like bcrypt
 async function verifyPassword(password, storedHash, salt) {
   // Create a SHA-256 hash of the password with salt
-  const hash = createHash('sha256')
-    .update(password + salt)
-    .digest('hex');
+  const hash = await sha256Hash(password + salt);
   
   // Compare hashes
   return hash === storedHash;
