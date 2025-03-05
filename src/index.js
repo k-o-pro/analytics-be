@@ -154,24 +154,6 @@ async function refreshUserGSCData(userId, refreshToken, env) {
   );
 }
 
-// Create CORS handlers
-const { preflight, corsify } = createCors({
-  origins: [/\.k-o\.pro$/],  // Allow all subdomains of k-o.pro
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  headers: {
-    'Access-Control-Allow-Credentials': 'true',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  }
-});
-
-// Initialize router
-const router = Router({ base: '/' });
-
-// Define routes
-router.post('/gsc/data', (request, env) => fetchGSCData(request, env));
-router.get('/gsc/properties', (request, env) => getProperties(request, env));
-router.get('/gsc/top-pages', (request, env) => getTopPages(request, env));
-
 export default {
   async fetch(request, env, ctx) {
     // Define common headers for CORS support

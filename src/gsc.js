@@ -158,62 +158,25 @@ export async function fetchGSCData(request, env) {
   // Get access token using refresh token
   const accessToken = await refreshToken(request, env);
   if (!accessToken) {
-    return new Response(JSON.stringify({
-      error: 'Failed to get access token'
-    }), { 
-      status: 401,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-
-  try {
-    // Search Analytics API call
-    const response = await fetch(
-      `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          startDate,
-          endDate,
-          dimensions,
-          rowLimit: 100,
-          aggregationType: 'auto'
-        })
+      // Token expired, try to refresh
+      const refreshResult = await refreshToken(request, env);
+      if (!refreshResult.ok) {
+          return refreshResult;
       }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('GSC API error:', errorText);
-      throw new Error(`GSC API error: ${response.status}`);
-    }
-
-    const gscData = await response.json();
-    console.log('GSC API response:', {
-      hasRows: !!gscData.rows,
-      rowCount: gscData.rows?.length || 0
-    });
-
-    return new Response(JSON.stringify(data), {
-      headers: { 'Content-Type': 'application/json' }
-    });
-  } catch (error) {
-    console.error('Error in fetchGSCData:', error);
-    return new Response(JSON.stringify({
-      success: false,
-      error: 'Internal server error',
-      details: error.message
-    }), { 
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+      // Get new access token
+      const newAccessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
+      
+      // Validate new token exists
+      if (!newAccessToken) {
+          return new Response('Failed to refresh access token', { 
+              status: 401,
+              headers: { 'Content-Type': 'application/json' }
+          });
+      }
+      
+      accessToken = newAccessToken;
   }
-}
-
+  
 router.post('/search-analytics', async (request) => {
     try {
       const { startDate, endDate, siteUrl } = await request.json();
@@ -249,52 +212,6 @@ router.post('/search-analytics', async (request) => {
   
     return searchAnalytics.data;
   }
-
-
-  // Query Search Console API
-  const response = await fetch(
-      `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
-      {
-          method: 'POST',
-          headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-              startDate,
-              endDate,
-              dimensions,
-              rowLimit: 500
-          })
-      }
-  );
-  
-  if (!response.ok) {
-      return new Response('Failed to fetch GSC data', { status: response.status });
-  }
-  
-  const data = await response.json();
-  
-  // Store data in database for historical tracking
-  const timestamp = new Date().toISOString();
-  const dataJson = JSON.stringify(data);
-  
-  await env.DB.prepare(
-      `INSERT INTO gsc_data (user_id, site_url, date_range, dimensions, data, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
-  ).bind(
-      userId,
-      siteUrl,
-      `${startDate} to ${endDate}`,
-      dimensions.join(','),
-      dataJson,
-      timestamp
-  ).run();
-  
-  return new Response(dataJson, {
-      headers: { 'Content-Type': 'application/json' }
-  });
-}
 
 // Get top pages
 export async function getTopPages(request, env) {
