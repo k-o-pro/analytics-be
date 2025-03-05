@@ -1,5 +1,5 @@
 // Functions to interact with Google Search Console API
-
+import { refreshToken } from './auth.js';
 // Get user's GSC properties
 export async function getProperties(request, env) {
   const userId = request.user.user_id;
