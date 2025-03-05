@@ -180,7 +180,8 @@ export async function fetchGSCData(request, env) {
           startDate,
           endDate,
           dimensions,
-          rowLimit: 100
+          rowLimit: 100,
+          aggregationType: 'auto'
         })
       }
     );
@@ -191,16 +192,20 @@ export async function fetchGSCData(request, env) {
       throw new Error(`GSC API error: ${response.status}`);
     }
 
-    const data = await response.json();
-    console.log('GSC API response:', data);
+    const gscData = await response.json();
+    console.log('GSC API response:', {
+      hasRows: !!gscData.rows,
+      rowCount: gscData.rows?.length || 0
+    });
 
     return new Response(JSON.stringify(data), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    console.error('Error fetching GSC data:', error);
+    console.error('Error in fetchGSCData:', error);
     return new Response(JSON.stringify({
-      error: 'Failed to fetch GSC data',
+      success: false,
+      error: 'Internal server error',
       details: error.message
     }), { 
       status: 500,

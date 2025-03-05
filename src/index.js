@@ -164,15 +164,19 @@ const { preflight, corsify } = createCors({
   }
 });
 
-// Initialize router with CORS
-const router = Router();
+// Initialize router
+const router = Router({ base: '/' });
 
-// Add CORS preflight handler for all routes
-router.options('*', (request) => {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+// Define routes
+router.post('/gsc/data', (request, env) => fetchGSCData(request, env));
+router.get('/gsc/properties', (request, env) => getProperties(request, env));
+router.get('/gsc/top-pages', (request, env) => getTopPages(request, env));
+
+export default {
+  async fetch(request, env, ctx) {
+    // Define common headers for CORS support
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       'Access-Control-Allow-Credentials': 'true',
@@ -181,66 +185,174 @@ router.options('*', (request) => {
   });
 });
 
-// Define auth routes first
+// System status endpoint - no auth required
+router.get('/system/status', checkSystem);
+router.get('/system/create-test-user', createTestUser);
+router.get('/system/check-user', checkUser);
+
+// Define auth routes
 router.post('/auth/register', handleRegister);
 router.post('/auth/login', handleLogin);
 router.post('/auth/callback', handleCallback);
 router.post('/auth/refresh', refreshToken);
 
-// Define other routes
-router.post('/gsc/data', (request, env) => fetchGSCData(request, env));
-router.get('/gsc/properties', (request, env) => getProperties(request, env));
-router.get('/gsc/top-pages', (request, env) => getTopPages(request, env));
+// Define API routes
+router.get('/gsc/properties', getProperties);
+router.post('/gsc/data', fetchGSCData);
+router.get('/gsc/top-pages', getTopPages);
 
 export default {
   async fetch(request, env, ctx) {
     try {
-      // Initialize database
+      // Initialize database on every request
       await initializeDatabase(env);
-
-      // Handle OPTIONS requests
-      if (request.method === 'OPTIONS') {
-        return preflight(request);
-      }
-
-      // Handle the request with router and wrap response with CORS
-      const response = await router.handle(request, env);
-      if (!response) {
-        return corsify(new Response(JSON.stringify({
+      
+      // Check for required environment variables
+      const requiredVars = ['JWT_SECRET', 'PASSWORD_SALT', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'];
+      const missingVars = requiredVars.filter(v => !env[v]);
+      
+      if (missingVars.length > 0) {
+        console.error(`Missing required environment variables: ${missingVars.join(', ')}`);
+        return new Response(JSON.stringify({
           success: false,
-          error: 'Not Found'
+          error: 'Server configuration error',
+          message: 'The server is missing required configuration.'
         }), {
-          status: 404,
-          headers: {
+          status: 500,
+          headers: { 
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
-            'Access-Control-Allow-Credentials': 'true'
+            ...corsHeaders
           }
         });
       }
-
-      // Add CORS headers if not present
-      if (!response.headers.has('Access-Control-Allow-Origin')) {
-        const origin = request.headers.get('Origin') || '';
-        if (origin.match(/\.k-o\.pro$/)) {
-          response.headers.set('Access-Control-Allow-Origin', origin);
-          response.headers.set('Access-Control-Allow-Credentials', 'true');
+      
+      // Authentication check for protected routes
+      let user = null;
+      if (path !== '/auth/register' && path !== '/auth/login' && path !== '/') {
+        const authHeader = request.headers.get('Authorization');
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          const token = authHeader.split(' ')[1];
+          try {
+            const verified = await jwt.verify(token, env.JWT_SECRET);
+            if (verified) {
+              user = verified.payload;
+              // Attach user to request object
+              request.user = user;
+            }
+          } catch (error) {
+            console.error('JWT verification error:', error);
+          }
+        }
+        
+        // Return unauthorized if not authenticated for protected routes
+        if (!user && path !== '/auth/callback') {
+          return new Response(JSON.stringify({
+            success: false,
+            error: 'Unauthorized',
+            message: 'Authentication required'
+          }), {
+            status: 401,
+            headers: {
+              'Content-Type': 'application/json',
+              ...corsHeaders
+            }
+          });
         }
       }
-
-      return response;
-
+      
+      // Direct path matching for key endpoints
+      if (path === '/auth/register' && request.method === 'POST') {
+        return await handleRegister(request, env);
+      }
+      
+      if (path === '/auth/login' && request.method === 'POST') {
+        return await handleLogin(request, env);
+      }
+      
+      if (path === '/auth/callback' && request.method === 'POST') {
+        return await handleCallback(request, env);
+      }
+      
+      if (path === '/auth/refresh' && request.method === 'POST') {
+        return await refreshToken(request, env);
+      }
+      
+      // GSC data routes
+      if (path === '/gsc/properties' && request.method === 'GET') {
+        return await getProperties(request, env);
+      }
+      
+      if (path === '/gsc/data' && request.method === 'POST') {
+        return await fetchGSCData(request, env);
+      }
+      
+      if (path === '/gsc/top-pages' && request.method === 'GET') {
+        return await getTopPages(request, env);
+      }
+      
+      // Analytics & insights routes
+      if (path === '/insights/generate' && request.method === 'POST') {
+        return await generateInsights(request, env);
+      }
+      
+      if (path.startsWith('/insights/page/') && request.method === 'POST') {
+        return await generatePageInsights(request, env);
+      }
+      
+      // Credits management
+      if (path === '/credits' && request.method === 'GET') {
+        return await getCredits(request, env);
+      }
+      
+      if (path === '/credits/use' && request.method === 'POST') {
+        return await useCredits(request, env);
+      }
+      
+      // Root path for health check
+      if (path === '/' && request.method === 'GET') {
+        return new Response(JSON.stringify({
+          status: 'ok',
+          message: 'API server is running',
+          version: '1.0.0'
+        }), {
+          status: 200,
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          }
+        });
+      }
+      
+      // If no route matches
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Not found',
+          path: path
+        }),
+        {
+          status: 404,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
+        }
+      );
     } catch (error) {
       console.error('Unhandled exception:', error);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Server error: ' + error.message,
-      }), {
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
-          'Access-Control-Allow-Credentials': 'true'
+      
+      // Return a generic error response
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Server error: ' + error.message,
+        }),
+        {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders,
+          },
         }
       ));
     }
