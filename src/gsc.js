@@ -128,11 +128,26 @@ export async function getProperties(request, env) {
 // Fetch GSC data for specified property
 export async function fetchGSCData(request, env) {
   const userId = request.user.user_id;
-  const { siteUrl, startDate, endDate, dimensions = ['query', 'page'] } = await request.json();
+  const { siteUrl, startDate, endDate, dimensions = ['date'] } = await request.json();
   
-  // Get access token from KV
-  let accessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
-  
+  console.log('Fetching GSC data:', { userId, siteUrl, startDate, endDate, dimensions });
+
+  // Get user's refresh token
+  const user = await env.DB.prepare(
+    'SELECT gsc_refresh_token FROM users WHERE id = ?'
+  ).bind(userId).first();
+
+  if (!user?.gsc_refresh_token) {
+    return new Response(JSON.stringify({
+      error: 'Google Search Console not connected'
+    }), { 
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+
+  // Get access token using refresh token
+  const accessToken = await refreshToken(request, env);
   if (!accessToken) {
       // Token expired, try to refresh
       const refreshResult = await refreshToken(request, env);
@@ -153,6 +168,43 @@ export async function fetchGSCData(request, env) {
       accessToken = newAccessToken;
   }
   
+router.post('/search-analytics', async (request) => {
+    try {
+      const { startDate, endDate, siteUrl } = await request.json();
+      
+      if (!startDate || !endDate || !siteUrl) {
+        return new Response('Missing required parameters', { status: 400 });
+      }
+  
+      const searchAnalytics = await getSearchAnalytics({
+        startDate,
+        endDate,
+        siteUrl
+      });
+  
+      return new Response(JSON.stringify(searchAnalytics), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (error) {
+      console.error('Error fetching search analytics:', error);
+      return new Response('Internal Server Error', { status: 500 });
+    }
+  });
+  
+  async function getSearchAnalytics({ startDate, endDate, siteUrl }) {
+    // Use the Google Search Console API client to fetch real data
+    const searchAnalytics = await googleSearchConsole.searchanalytics.query({
+      siteUrl: siteUrl,
+      startDate: startDate,
+      endDate: endDate,
+      dimensions: ['query', 'page'],
+      rowLimit: 250
+    });
+  
+    return searchAnalytics.data;
+  }
+
+
   // Query Search Console API
   const response = await fetch(
       `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
