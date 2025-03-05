@@ -1,50 +1,119 @@
 // Functions to interact with Google Search Console API
 import { refreshToken } from './auth.js';
+
 // Get user's GSC properties
 export async function getProperties(request, env) {
   const userId = request.user.user_id;
   
+  console.log(`Getting GSC properties for user ${userId}`);
+  
+  // Check if user has connected GSC
+  const user = await env.DB.prepare(
+      'SELECT gsc_connected, gsc_refresh_token FROM users WHERE id = ?'
+  ).bind(userId).first();
+  
+  if (!user || !user.gsc_connected || !user.gsc_refresh_token) {
+      console.log(`User ${userId} has not connected GSC yet:`, {
+          hasUser: !!user,
+          connected: user?.gsc_connected,
+          hasRefreshToken: !!user?.gsc_refresh_token
+      });
+      
+      return new Response(JSON.stringify({
+          success: false,
+          error: 'Google Search Console not connected',
+          needsConnection: true
+      }), { 
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+      });
+  }
+  
   // Get access token from KV
   let accessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
+  console.log(`Access token for user ${userId}: ${accessToken ? 'Present' : 'Missing'}`);
   
   if (!accessToken) {
+      console.log(`Access token not found for user ${userId}, refreshing...`);
       // Token expired, try to refresh
       const refreshResult = await refreshToken(request, env);
       if (!refreshResult.ok) {
+          console.error(`Failed to refresh token for user ${userId}:`, refreshResult.statusText);
           return refreshResult;
       }
+      
       // Get new access token
       const newAccessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
       
       // Validate new token exists
       if (!newAccessToken) {
-          return new Response('Failed to refresh access token', { 
+          console.error(`Failed to get new access token for user ${userId} after refresh`);
+          return new Response(JSON.stringify({
+              success: false,
+              error: 'Failed to refresh access token',
+              needsConnection: true
+          }), { 
               status: 401,
               headers: { 'Content-Type': 'application/json' }
           });
       }
       
+      console.log(`Token refreshed successfully for user ${userId}`);
       accessToken = newAccessToken;
   }
   
   // Fetch GSC properties
-  const response = await fetch(
-      'https://www.googleapis.com/webmasters/v3/sites',
-      {
-          headers: {
-              'Authorization': `Bearer ${accessToken}`
+  console.log(`Fetching GSC properties for user ${userId}`);
+  try {
+      const response = await fetch(
+          'https://www.googleapis.com/webmasters/v3/sites',
+          {
+              headers: {
+                  'Authorization': `Bearer ${accessToken}`
+              }
           }
+      );
+      
+      if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`GSC API error (${response.status}):`, errorText);
+          
+          // If unauthorized, token might be invalid, try refreshing
+          if (response.status === 401) {
+              console.log('Token seems invalid, trying to refresh...');
+              await env.AUTH_STORE.delete(`gsc_token:${userId}`);
+              return getProperties(request, env); // Retry once with a fresh token
+          }
+          
+          return new Response(JSON.stringify({
+              success: false,
+              error: `Failed to fetch properties: ${errorText}`,
+              status: response.status
+          }), { 
+              status: response.status,
+              headers: { 'Content-Type': 'application/json' }
+          });
       }
-  );
-  
-  if (!response.ok) {
-      return new Response('Failed to fetch properties', { status: response.status });
+      
+      const data = await response.json();
+      console.log(`Successfully fetched ${data.siteEntry?.length || 0} GSC properties for user ${userId}`);
+      
+      return new Response(JSON.stringify({
+          success: true,
+          ...data
+      }), {
+          headers: { 'Content-Type': 'application/json' }
+      });
+  } catch (error) {
+      console.error(`Error fetching GSC properties for user ${userId}:`, error);
+      return new Response(JSON.stringify({
+          success: false,
+          error: `Failed to fetch properties: ${error.message}`
+      }), { 
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+      });
   }
-  
-  const data = await response.json();
-  return new Response(JSON.stringify(data), {
-      headers: { 'Content-Type': 'application/json' }
-  });
 }
 
 // Fetch GSC data for specified property

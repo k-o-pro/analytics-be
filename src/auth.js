@@ -394,49 +394,102 @@ export async function handleCallback(request, env) {
 // Refresh GSC token
 export async function refreshToken(request, env) {
   const userId = request.user.user_id;
+  console.log(`Refreshing GSC token for user ${userId}`);
   
   // Get refresh token from database
   const user = await env.DB.prepare(
-    'SELECT gsc_refresh_token FROM users WHERE id = ?'
+    'SELECT gsc_refresh_token, email FROM users WHERE id = ?'
   ).bind(userId).first();
   
   if (!user || !user.gsc_refresh_token) {
-    return new Response('No refresh token found', { status: 400 });
+    console.error(`No refresh token found for user ${userId}`);
+    
+    // Update the connected status to false
+    if (user) {
+      console.log(`Marking user ${userId} as GSC disconnected due to missing refresh token`);
+      await env.DB.prepare(
+        'UPDATE users SET gsc_connected = 0 WHERE id = ?'
+      ).bind(userId).run();
+    }
+    
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'No refresh token found',
+      needsConnection: true
+    }), { 
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
+  
+  console.log(`Found refresh token for user ${userId} (${user.email}), exchanging for access token`);
   
   // Exchange refresh token for new access token
-  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      refresh_token: user.gsc_refresh_token,
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
-      grant_type: 'refresh_token'
-    })
-  });
-  
-  if (!tokenResponse.ok) {
-    // If refresh fails, prompt user to reconnect
+  try {
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        refresh_token: user.gsc_refresh_token,
+        client_id: env.GOOGLE_CLIENT_ID,
+        client_secret: env.GOOGLE_CLIENT_SECRET,
+        grant_type: 'refresh_token'
+      })
+    });
+    
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error(`Token refresh failed for user ${userId}: ${errorText}`);
+      
+      // If refresh fails, prompt user to reconnect
+      console.log(`Marking user ${userId} as GSC disconnected due to token refresh failure`);
+      await env.DB.prepare(
+        'UPDATE users SET gsc_connected = 0 WHERE id = ?'
+      ).bind(userId).run();
+      
+      return new Response(JSON.stringify({
+        success: false,
+        error: `Failed to refresh token: ${errorText}`,
+        needsConnection: true
+      }), { 
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    const tokenData = await tokenResponse.json();
+    const { access_token, expires_in } = tokenData;
+    
+    console.log(`Token refreshed successfully for user ${userId}, expires in ${expires_in} seconds`);
+    
+    // Store new access token in KV
+    await env.AUTH_STORE.put(
+      `gsc_token:${userId}`, 
+      access_token, 
+      { expirationTtl: expires_in }
+    );
+    
+    // Make sure the connected flag is set to true
     await env.DB.prepare(
-      'UPDATE users SET gsc_connected = 0 WHERE id = ?'
+      'UPDATE users SET gsc_connected = 1 WHERE id = ?'
     ).bind(userId).run();
     
-    return new Response('Failed to refresh token', { status: 401 });
+    return new Response(JSON.stringify({ 
+      success: true,
+      message: 'Token refreshed successfully' 
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error(`Error refreshing token for user ${userId}:`, error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: `Error refreshing token: ${error.message}`
+    }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
-  
-  const { access_token, expires_in } = await tokenResponse.json();
-  
-  // Store new access token in KV
-  await env.AUTH_STORE.put(
-    `gsc_token:${userId}`, 
-    access_token, 
-    { expirationTtl: expires_in }
-  );
-  
-  return new Response(JSON.stringify({ success: true }), {
-    headers: { 'Content-Type': 'application/json' }
-  });
 }
 
 // Password verification function (simple SHA-256 hash with salt)
