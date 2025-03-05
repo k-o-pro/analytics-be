@@ -235,6 +235,12 @@ export async function handleCallback(request, env) {
       'Access-Control-Allow-Credentials': 'true'
     };
     
+    // Log request details for debugging
+    console.log('OAuth callback request received:');
+    console.log('- Authorization header:', request.headers.get('Authorization') ? 'Present' : 'Missing');
+    console.log('- Has code:', code ? 'Yes' : 'No');
+    console.log('- Has state:', state ? 'Yes' : 'No');
+    
     // Validate required parameters
     if (!code) {
       console.error('Missing authorization code in request');
@@ -258,65 +264,113 @@ export async function handleCallback(request, env) {
       }), { status: 401, headers });
     }
     
+    console.log(`User authenticated with ID: ${request.user.user_id}`);
+    
     // Exchange code for tokens
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code,
-        client_id: env.GOOGLE_CLIENT_ID,
-        client_secret: env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: `${env.FRONTEND_URL}/oauth-callback`,
-        grant_type: 'authorization_code'
-      })
-    });
-    
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      console.error('OAuth token exchange error:', errorText);
-      return new Response(JSON.stringify({
-        success: false,
-        error: `OAuth error: ${errorText}`
-      }), { status: 400, headers });
-    }
-    
-    const { access_token, refresh_token, expires_in } = await tokenResponse.json();
-    
-    if (!refresh_token) {
-      console.error('No refresh token returned from Google OAuth');
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'No refresh token received from Google'
-      }), { status: 400, headers });
-    }
-    
-    // Store refresh token in database (linked to user)
-    const userId = request.user.user_id;
-    console.log(`Updating GSC connection for user ID: ${userId}`);
-    
     try {
-      await env.DB.prepare(
-        'UPDATE users SET gsc_refresh_token = ?, gsc_connected = 1 WHERE id = ?'
-      ).bind(refresh_token, userId).run();
+      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: env.GOOGLE_CLIENT_ID,
+          client_secret: env.GOOGLE_CLIENT_SECRET,
+          redirect_uri: `${env.FRONTEND_URL}/oauth-callback`,
+          grant_type: 'authorization_code'
+        })
+      });
       
-      // Store access token in KV with expiration
-      await env.AUTH_STORE.put(
-        `gsc_token:${userId}`, 
-        access_token, 
-        { expirationTtl: expires_in }
-      );
+      if (!tokenResponse.ok) {
+        const errorText = await tokenResponse.text();
+        console.error('OAuth token exchange error:', errorText);
+        return new Response(JSON.stringify({
+          success: false,
+          error: `OAuth error: ${errorText}`
+        }), { status: 400, headers });
+      }
       
-      console.log(`Successfully connected GSC for user ID: ${userId}`);
+      const tokenData = await tokenResponse.json();
+      const { access_token, refresh_token, expires_in } = tokenData;
       
-      return new Response(JSON.stringify({ 
-        success: true,
-        message: 'Successfully connected to Google Search Console' 
-      }), { status: 200, headers });
-    } catch (dbError) {
-      console.error('Database error during GSC connection:', dbError);
+      console.log('Token exchange successful:');
+      console.log('- Has access token:', !!access_token);
+      console.log('- Has refresh token:', !!refresh_token);
+      console.log('- Expires in:', expires_in);
+      
+      if (!refresh_token) {
+        console.error('No refresh token returned from Google OAuth');
+        // If we received an access token but no refresh token, it might be because
+        // the user previously granted permission to the same app
+        if (access_token) {
+          console.log('Access token received without refresh token, checking if we already have a refresh token');
+          
+          // Check if we already have a refresh token for this user
+          const user = await env.DB.prepare(
+            'SELECT gsc_refresh_token FROM users WHERE id = ?'
+          ).bind(request.user.user_id).first();
+          
+          if (user && user.gsc_refresh_token) {
+            console.log('Using existing refresh token');
+            
+            // Store new access token in KV with expiration
+            await env.AUTH_STORE.put(
+              `gsc_token:${request.user.user_id}`, 
+              access_token, 
+              { expirationTtl: expires_in }
+            );
+            
+            // Update the connected status
+            await env.DB.prepare(
+              'UPDATE users SET gsc_connected = 1 WHERE id = ?'
+            ).bind(request.user.user_id).run();
+            
+            return new Response(JSON.stringify({ 
+              success: true,
+              message: 'Successfully connected to Google Search Console' 
+            }), { status: 200, headers });
+          }
+        }
+        
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'No refresh token received from Google. Please revoke access and try again.'
+        }), { status: 400, headers });
+      }
+      
+      // Store refresh token in database (linked to user)
+      const userId = request.user.user_id;
+      console.log(`Updating GSC connection for user ID: ${userId}`);
+      
+      try {
+        await env.DB.prepare(
+          'UPDATE users SET gsc_refresh_token = ?, gsc_connected = 1 WHERE id = ?'
+        ).bind(refresh_token, userId).run();
+        
+        // Store access token in KV with expiration
+        await env.AUTH_STORE.put(
+          `gsc_token:${userId}`, 
+          access_token, 
+          { expirationTtl: expires_in }
+        );
+        
+        console.log(`Successfully connected GSC for user ID: ${userId}`);
+        
+        return new Response(JSON.stringify({ 
+          success: true,
+          message: 'Successfully connected to Google Search Console' 
+        }), { status: 200, headers });
+      } catch (dbError) {
+        console.error('Database error during GSC connection:', dbError);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Failed to store GSC connection information'
+        }), { status: 500, headers });
+      }
+    } catch (tokenError) {
+      console.error('Error during token exchange:', tokenError);
       return new Response(JSON.stringify({
         success: false,
-        error: 'Failed to store GSC connection information'
+        error: 'Token exchange error: ' + tokenError.message
       }), { status: 500, headers });
     }
   } catch (error) {
