@@ -167,6 +167,7 @@ export async function fetchGSCData(request, env) {
   }
 
   try {
+    // Search Analytics API call
     const response = await fetch(
       `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
       {
