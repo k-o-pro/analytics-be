@@ -5,6 +5,15 @@ import { refreshToken } from './auth.js';
 export async function getProperties(request, env) {
   const userId = request.user.user_id;
   
+  // Define common headers including CORS
+  const headers = {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true'
+  };
+  
   console.log(`Getting GSC properties for user ${userId}`);
   
   // Check if user has connected GSC
@@ -25,7 +34,7 @@ export async function getProperties(request, env) {
           needsConnection: true
       }), { 
           status: 400,
-          headers: { 'Content-Type': 'application/json' }
+          headers: headers
       });
   }
   
@@ -54,7 +63,7 @@ export async function getProperties(request, env) {
               needsConnection: true
           }), { 
               status: 401,
-              headers: { 'Content-Type': 'application/json' }
+              headers: headers
           });
       }
       
@@ -91,7 +100,7 @@ export async function getProperties(request, env) {
               status: response.status
           }), { 
               status: response.status,
-              headers: { 'Content-Type': 'application/json' }
+              headers: headers
           });
       }
       
@@ -102,7 +111,7 @@ export async function getProperties(request, env) {
           success: true,
           ...data
       }), {
-          headers: { 'Content-Type': 'application/json' }
+          headers: headers
       });
   } catch (error) {
       console.error(`Error fetching GSC properties for user ${userId}:`, error);
@@ -111,7 +120,7 @@ export async function getProperties(request, env) {
           error: `Failed to fetch properties: ${error.message}`
       }), { 
           status: 500,
-          headers: { 'Content-Type': 'application/json' }
+          headers: headers
       });
   }
 }

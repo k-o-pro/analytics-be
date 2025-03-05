@@ -396,6 +396,15 @@ export async function refreshToken(request, env) {
   const userId = request.user.user_id;
   console.log(`Refreshing GSC token for user ${userId}`);
   
+  // Define common headers including CORS
+  const headers = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true'
+  };
+  
   // Get refresh token from database
   const user = await env.DB.prepare(
     'SELECT gsc_refresh_token, email FROM users WHERE id = ?'
@@ -418,7 +427,7 @@ export async function refreshToken(request, env) {
       needsConnection: true
     }), { 
       status: 400,
-      headers: { 'Content-Type': 'application/json' }
+      headers: headers
     });
   }
   
@@ -453,7 +462,7 @@ export async function refreshToken(request, env) {
         needsConnection: true
       }), { 
         status: 401,
-        headers: { 'Content-Type': 'application/json' }
+        headers: headers
       });
     }
     
@@ -478,7 +487,7 @@ export async function refreshToken(request, env) {
       success: true,
       message: 'Token refreshed successfully' 
     }), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: headers
     });
   } catch (error) {
     console.error(`Error refreshing token for user ${userId}:`, error);
@@ -487,7 +496,7 @@ export async function refreshToken(request, env) {
       error: `Error refreshing token: ${error.message}`
     }), { 
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: headers
     });
   }
 }
