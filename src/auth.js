@@ -39,195 +39,6 @@ export async function handleAuth(request, env) {
 }
 
 // Handle registration
-// Function to create test data if needed
-export async function createTestUser(request) {
-  const env = request.env;
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true'
-  };
-  
-  // Only allow this in development mode
-  if (env.NODE_ENV !== 'development') {
-    return new Response(JSON.stringify({
-      success: false,
-      error: 'This endpoint is only available in development mode'
-    }), {
-      status: 403,
-      headers
-    });
-  }
-  
-  try {
-    // Create a test user
-    const email = 'test@example.com';
-    const password = 'password123';
-    const salt = env.PASSWORD_SALT || 'test-salt';
-    
-    // Hash the password
-    const hash = await sha256Hash(password + salt);
-    
-    // Try to delete existing test user first
-    try {
-      await env.DB.prepare('DELETE FROM users WHERE email = ?').bind(email).run();
-    } catch (deleteError) {
-      console.log('Error deleting existing test user:', deleteError);
-    }
-    
-    // Create the user
-    await env.DB.prepare(
-      'INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, datetime())'
-    ).bind('Test User', email, hash).run();
-    
-    return new Response(JSON.stringify({
-      success: true,
-      message: 'Test user created',
-      credentials: {
-        email,
-        password: 'password123'
-      }
-    }), {
-      status: 200,
-      headers
-    });
-  } catch (error) {
-    return new Response(JSON.stringify({
-      success: false,
-      error: error.message
-    }), {
-      status: 500,
-      headers
-    });
-  }
-}
-
-// Diagnostic function to check system health
-export async function checkUser(request) {
-  const env = request.env;
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true'
-  };
-  
-  try {
-    // Get email from query params
-    const url = new URL(request.url);
-    const email = url.searchParams.get('email');
-    
-    if (!email) {
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Email parameter is required'
-      }), {
-        status: 400,
-        headers
-      });
-    }
-    
-    // Check if this email exists in the database
-    const user = await env.DB.prepare(
-      'SELECT id, email, password_hash, created_at FROM users WHERE email = ?'
-    ).bind(email).first();
-    
-    if (!user) {
-      return new Response(JSON.stringify({
-        success: false,
-        message: 'User not found'
-      }), {
-        status: 404,
-        headers
-      });
-    }
-    
-    // User found, return info (excluding sensitive parts of hash)
-    return new Response(JSON.stringify({
-      success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        created_at: user.created_at,
-        has_password: !!user.password_hash,
-        password_hash_sample: user.password_hash ? 
-          `${user.password_hash.substring(0, 6)}...${user.password_hash.substring(user.password_hash.length - 6)}` : null
-      }
-    }), {
-      status: 200,
-      headers
-    });
-  } catch (error) {
-    return new Response(JSON.stringify({
-      success: false,
-      error: error.message
-    }), {
-      status: 500,
-      headers
-    });
-  }
-}
-
-export async function checkSystem(request) {
-  const env = request.env;
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true'
-  };
-  
-  try {
-    // Check environment variables
-    const envStatus = {
-      jwt_secret: !!env.JWT_SECRET,
-      password_salt: !!env.PASSWORD_SALT,
-      db_binding: !!env.DB,
-      kv_binding: !!env.AUTH_STORE,
-      frontend_url: env.FRONTEND_URL || 'https://analytics.k-o.pro'
-    };
-    
-    // Test database connection
-    let dbStatus = { connected: false, error: null };
-    
-    if (env.DB) {
-      try {
-        const result = await env.DB.prepare('SELECT 1 as test').first();
-        dbStatus.connected = !!result?.test;
-        dbStatus.test_result = result;
-        
-        // Count users
-        const userCount = await env.DB.prepare('SELECT COUNT(*) as count FROM users').first();
-        dbStatus.user_count = userCount?.count || 0;
-      } catch (dbError) {
-        dbStatus.error = dbError.message;
-      }
-    }
-    
-    return new Response(JSON.stringify({
-      success: true,
-      timestamp: new Date().toISOString(),
-      environment: envStatus,
-      database: dbStatus
-    }), {
-      status: 200,
-      headers
-    });
-  } catch (error) {
-    return new Response(JSON.stringify({
-      success: false,
-      error: error.message
-    }), {
-      status: 500,
-      headers
-    });
-  }
-}
-
 export async function handleRegister(request, env) {
   // Basic headers for all responses
   const headers = {
@@ -316,178 +127,97 @@ export async function handleRegister(request, env) {
   }
 }
 
-// Add CORS headers to all responses
-const getCorsHeaders = () => ({
-  'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Allow-Credentials': 'true',
-  'Access-Control-Max-Age': '86400',
-});
-
-// Handle OPTIONS requests for CORS preflight
-async function handleOptions() {
-  return new Response(null, {
-    headers: getCorsHeaders()
-  });
-}
-
 // Handle login
-export async function handleLogin(request) {
-  const env = request.env;
-  const headers = {
-    'Content-Type': 'application/json',
-    ...getCorsHeaders()
-  };
-
+export async function handleLogin(request, env) {
   try {
-    // Handle OPTIONS request
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers });
-    }
-
-    console.log('Login request received:', request.url);
+    const { email, password } = await request.json();
     
-    let email, password;
-    try {
-      const data = await request.json();
-      email = data.email;
-      password = data.password;
-      
-      if (!email || !password) {
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Email and password are required'
-        }), { status: 400, headers });
-      }
-
-      if (!env.JWT_SECRET || !env.PASSWORD_SALT) {
-        console.error('Missing environment variables:', {
-          hasJwtSecret: !!env.JWT_SECRET,
-          hasPasswordSalt: !!env.PASSWORD_SALT
-        });
-        
-        // List all available env vars (safe ones)
-        console.log('Available environment variables:', Object.keys(env).filter(key => 
-          !key.toLowerCase().includes('secret') && 
-          !key.toLowerCase().includes('password') && 
-          !key.toLowerCase().includes('token')
-        ));
-        
-        return new Response(JSON.stringify({
+    // Content-Type header for all responses
+    const headers = {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true'
+    };
+    
+    // Check if JWT_SECRET and PASSWORD_SALT are defined
+    if (!env.JWT_SECRET || !env.PASSWORD_SALT) {
+      console.error('Missing JWT_SECRET or PASSWORD_SALT environment variables');
+      return new Response(
+        JSON.stringify({
           success: false,
           error: 'Server configuration error'
-        }), { status: 500, headers });
-      }
-      
-      // Log for debugging
-      console.log('Environment variables check passed:', {
-        hasJwtSecret: !!env.JWT_SECRET,
-        hasPasswordSalt: !!env.PASSWORD_SALT,
-        jwtSecretLength: env.JWT_SECRET ? env.JWT_SECRET.length : 0,
-        saltLength: env.PASSWORD_SALT ? env.PASSWORD_SALT.length : 0
-      });
-    } catch (parseError) {
-      console.error('Failed to parse request JSON:', parseError);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Invalid request format'
-      }), { status: 400, headers });
+        }),
+        { status: 500, headers }
+      );
     }
     
     // Query the database for user
-    try {
-      console.log('Querying database for user email:', email);
-      
-      // Check if DB is available
-      if (!env.DB) {
-        console.error('Database not available in environment');
-        return new Response(JSON.stringify({
+    const user = await env.DB.prepare(
+      'SELECT id, email, password_hash FROM users WHERE email = ?'
+    ).bind(email).first();
+    
+    if (!user) {
+      return new Response(
+        JSON.stringify({
           success: false,
-          error: 'Database configuration error'
-        }), { status: 500, headers });
-      }
-      
-      try {
-        // Test DB connection with a simple query first
-        const testResult = await env.DB.prepare('SELECT 1 as test').first();
-        console.log('Database test query result:', testResult);
-      } catch (testError) {
-        console.error('Database connection test failed:', testError);
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Database connection error'
-        }), { status: 500, headers });
-      }
-      
-      const user = await env.DB.prepare(
-        'SELECT id, email, password_hash FROM users WHERE email = ?'
-      ).bind(email).first();
-
-      console.log('Database query complete. User found:', !!user);
-      
-      if (!user) {
-        console.log('User not found:', email);
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Invalid email or password'
-        }), { status: 401, headers });
-      }
-      
-      console.log('User details retrieved:', {
-        id: user.id,
-        email: user.email,
-        has_password: !!user.password_hash
-      });
-
-      // Verify password
-      try {
-        const passwordValid = await verifyPassword(password, user.password_hash, env.PASSWORD_SALT);
-        
-        if (!passwordValid) {
-          console.log('Invalid password for user:', email);
-          return new Response(JSON.stringify({
-            success: false,
-            error: 'Invalid credentials'
-          }), { status: 401, headers });
-        }
-        
-        // Generate JWT token
-        const token = await sign({
-          user_id: user.id,
-          email: user.email
-        }, env.JWT_SECRET, { expiresIn: '24h' });
-        
-        // Update last login timestamp
-        await env.DB.prepare(
-          'UPDATE users SET last_login = datetime() WHERE id = ?'
-        ).bind(user.id).run();
-        
-        console.log('Login successful for user:', email);
-        return new Response(JSON.stringify({ 
-          success: true,
-          token 
-        }), { status: 200, headers });
-      } catch (passwordError) {
-        console.error('Password verification error:', passwordError);
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Authentication error'
-        }), { status: 500, headers });
-      }
-    } catch (dbError) {
-      console.error('Database error during login:', dbError);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Database error during login'
-      }), { status: 500, headers });
+          error: 'Invalid credentials'
+        }), 
+        { status: 401, headers }
+      );
     }
+    
+    // Verify password (in production, use bcrypt or similar)
+    const passwordValid = await verifyPassword(password, user.password_hash, env.PASSWORD_SALT);
+    
+    if (!passwordValid) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Invalid credentials'
+        }), 
+        { status: 401, headers }
+      );
+    }
+    
+    // Generate JWT token
+    const token = await sign({
+      user_id: user.id,
+      email: user.email
+    }, env.JWT_SECRET, { expiresIn: '24h' });
+    
+    // Update last login timestamp
+    await env.DB.prepare(
+      'UPDATE users SET last_login = datetime() WHERE id = ?'
+    ).bind(user.id).run();
+    
+    return new Response(
+      JSON.stringify({ 
+        success: true,
+        token 
+      }), 
+      { status: 200, headers }
+    );
   } catch (error) {
     console.error('Login error:', error);
-    return new Response(JSON.stringify({
-      success: false,
-      error: 'Login failed: ' + error.message
-    }), { status: 500, headers });
+    
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: 'Login failed: ' + error.message 
+      }), 
+      { 
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+          'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true'
+        }
+      }
+    );
   }
 }
 
@@ -774,17 +504,8 @@ export async function refreshToken(request, env) {
 // Password verification function (simple SHA-256 hash with salt)
 // Note: For production, consider using a more robust password hashing method like bcrypt
 async function verifyPassword(password, storedHash, salt) {
-  console.log('Verifying password:');
-  console.log('- Password provided:', !!password);
-  console.log('- Stored hash available:', !!storedHash);
-  console.log('- Salt available:', !!salt);
-  
   // Create a SHA-256 hash of the password with salt
   const hash = await sha256Hash(password + salt);
-  
-  console.log('- Generated hash:', hash ? hash.substring(0, 6) + '...' : 'null');
-  console.log('- Stored hash:', storedHash ? storedHash.substring(0, 6) + '...' : 'null');
-  console.log('- Hashes match:', hash === storedHash);
   
   // Compare hashes
   return hash === storedHash;

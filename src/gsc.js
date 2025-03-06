@@ -2,7 +2,7 @@
 import { refreshToken } from './auth.js';
 
 // Get user's GSC properties
-async function getProperties(request, env) {
+export async function getProperties(request, env) {
   const userId = request.user.user_id;
   
   // Define common headers including CORS
@@ -126,250 +126,160 @@ async function getProperties(request, env) {
 }
 
 // Fetch GSC data for specified property
-async function fetchGSCData(request, env) {
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true'
-  };
-
-  try {
-    const userId = request.user.user_id;
-    const { siteUrl, startDate, endDate, dimensions = ['date'] } = await request.json();
-    
-    console.log('Fetching GSC data:', { userId, siteUrl, startDate, endDate, dimensions });
-
-    // Get user's refresh token
-    const user = await env.DB.prepare(
-      'SELECT gsc_refresh_token FROM users WHERE id = ?'
-    ).bind(userId).first();
-
-    if (!user?.gsc_refresh_token) {
-      return new Response(JSON.stringify({
-        error: 'Google Search Console not connected'
-      }), { 
-        status: 400,
-        headers
-      });
-    }
-
-    // Get access token from KV or refresh
-    let accessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
-    
-    if (!accessToken) {
+export async function fetchGSCData(request, env) {
+  const userId = request.user.user_id;
+  const { siteUrl, startDate, endDate, dimensions = ['query', 'page'] } = await request.json();
+  
+  // Get access token from KV
+  let accessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
+  
+  if (!accessToken) {
       // Token expired, try to refresh
       const refreshResult = await refreshToken(request, env);
       if (!refreshResult.ok) {
-        return refreshResult;
+          return refreshResult;
       }
-      
       // Get new access token
-      accessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
+      const newAccessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
       
       // Validate new token exists
-      if (!accessToken) {
-        return new Response(JSON.stringify({
-          error: 'Failed to refresh access token'
-        }), { 
-          status: 401,
-          headers
-        });
+      if (!newAccessToken) {
+          return new Response('Failed to refresh access token', { 
+              status: 401,
+              headers: { 'Content-Type': 'application/json' }
+          });
       }
-    }
-    
-    // Call GSC API
-    const response = await fetch(
+      
+      accessToken = newAccessToken;
+  }
+  
+  // Query Search Console API
+  const response = await fetch(
       `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
       {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          startDate,
-          endDate,
-          dimensions,
-          rowLimit: 1000
-        })
+          method: 'POST',
+          headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+              startDate,
+              endDate,
+              dimensions,
+              rowLimit: 500
+          })
       }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return new Response(JSON.stringify({
-        error: `GSC API error: ${response.status}`,
-        details: errorText
-      }), {
-        status: response.status,
-        headers
-      });
-    }
-
-    const data = await response.json();
-    
-    // Save data to DB for future use
-    const timestamp = new Date().toISOString();
-    await env.DB.prepare(`
-      INSERT INTO gsc_data (user_id, site_url, date_range, dimensions, data, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(
+  );
+  
+  if (!response.ok) {
+      return new Response('Failed to fetch GSC data', { status: response.status });
+  }
+  
+  const data = await response.json();
+  
+  // Store data in database for historical tracking
+  const timestamp = new Date().toISOString();
+  const dataJson = JSON.stringify(data);
+  
+  await env.DB.prepare(
+      `INSERT INTO gsc_data (user_id, site_url, date_range, dimensions, data, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(
       userId,
       siteUrl,
-      `${startDate}|${endDate}`,
-      JSON.stringify(dimensions),
-      JSON.stringify(data),
+      `${startDate} to ${endDate}`,
+      dimensions.join(','),
+      dataJson,
       timestamp
-    ).run();
-    
-    return new Response(JSON.stringify({
-      success: true,
-      data
-    }), {
-      headers
-    });
-    
-  } catch (error) {
-    console.error('Error fetching GSC data:', error);
-    return new Response(JSON.stringify({
-      error: `Failed to fetch GSC data: ${error.message}`
-    }), {
-      status: 500,
-      headers
-    });
-  }
+  ).run();
+  
+  return new Response(dataJson, {
+      headers: { 'Content-Type': 'application/json' }
+  });
 }
 
 // Get top pages
-async function getTopPages(request, env) {
-  const headers = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true'
-  };
+export async function getTopPages(request, env) {
+  const userId = request.user.user_id;
+  const url = new URL(request.url);
+  const siteUrl = url.searchParams.get('siteUrl');
+  const startDate = url.searchParams.get('startDate');
+  const endDate = url.searchParams.get('endDate');
   
-  try {
-    const userId = request.user.user_id;
-    const url = new URL(request.url);
-    const siteUrl = url.searchParams.get('siteUrl');
-    const startDate = url.searchParams.get('startDate');
-    const endDate = url.searchParams.get('endDate');
-    
-    if (!siteUrl || !startDate || !endDate) {
-      return new Response(JSON.stringify({
-        error: 'Missing required parameters',
-        required: ['siteUrl', 'startDate', 'endDate']
-      }), {
-        status: 400,
-        headers
-      });
-    }
-    
-    // Get user's GSC refresh token and credits
-    const user = await env.DB.prepare(
-      'SELECT gsc_refresh_token, credits FROM users WHERE id = ?'
-    ).bind(userId).first();
-
-    if (!user?.gsc_refresh_token) {
-      return new Response(JSON.stringify({
-        error: 'GSC not connected',
-        needsConnection: true
-      }), {
-        status: 400,
-        headers
-      });
-    }
-
-    // Get access token from KV or refresh
-    let accessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
-    
-    if (!accessToken) {
-      // Token expired, try to refresh
+  // Check if user has enough credits for more than 10 pages
+  const user = await env.DB.prepare(
+      'SELECT credits FROM users WHERE id = ?'
+  ).bind(userId).first();
+  
+  // Default page limit
+  let pageLimit = 10;
+  
+  // If analyzing more than 10 pages, check credits
+  if (url.searchParams.get('limit') && parseInt(url.searchParams.get('limit')) > 10) {
+      const requestedLimit = parseInt(url.searchParams.get('limit'));
+      
+      if (user.credits > 0) {
+          // Allow up to 50 pages with credits
+          pageLimit = Math.min(requestedLimit, 50);
+          
+          // Deduct credit if using more than default limit
+          if (pageLimit > 10) {
+              await env.DB.prepare(
+                  'UPDATE users SET credits = credits - 1 WHERE id = ?'
+              ).bind(userId).run();
+          }
+      }
+  }
+  
+  // Get access token from KV (added token refresh logic)
+  let accessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
+  
+  if (!accessToken) {
       const refreshResult = await refreshToken(request, env);
       if (!refreshResult.ok) {
-        return refreshResult;
+          return refreshResult;
       }
-      
-      // Get new access token
-      accessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
-      
-      // Validate new token exists
-      if (!accessToken) {
-        return new Response(JSON.stringify({
-          error: 'Failed to refresh access token'
-        }), { 
-          status: 401,
-          headers
-        });
+      const newAccessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
+      if (!newAccessToken) {
+          return new Response('Failed to refresh access token', { 
+              status: 401,
+              headers: { 'Content-Type': 'application/json' }
+          });
       }
-    }
-
-    // Call GSC API
-    const response = await fetch(
+      accessToken = newAccessToken;
+  }
+  
+  // Query Search Console API for pages data
+  const response = await fetch(
       `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
       {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          startDate,
-          endDate,
-          dimensions: ['page'],
-          rowLimit: 500 // We'll filter down to requested limit after getting data
-        })
+          method: 'POST',
+          headers: {
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+              startDate,
+              endDate,
+              dimensions: ['page'],
+              rowLimit: pageLimit
+          })
       }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return new Response(JSON.stringify({
-        error: `GSC API error: ${response.status}`,
-        details: errorText
-      }), {
-        status: response.status,
-        headers
-      });
-    }
-
-    const gscData = await response.json();
-    
-    // Transform and return data
-    const pages = gscData.rows ? gscData.rows.map(row => ({
-      url: row.keys[0],
-      clicks: row.clicks,
-      impressions: row.impressions,
-      ctr: row.ctr,
-      position: row.position
-    })) : [];
-
-    return new Response(JSON.stringify({
-      success: true,
-      pages,
-      creditsRemaining: user.credits
-    }), {
-      headers
-    });
-
-  } catch (error) {
-    console.error('Error fetching top pages:', error);
-    return new Response(JSON.stringify({
-      error: `Failed to fetch GSC data: ${error.message}`
-    }), {
-      status: 500,
-      headers
-    });
+  );
+  
+  if (!response.ok) {
+      return new Response('Failed to fetch top pages', { status: response.status });
   }
+  
+  const data = await response.json();
+  
+  const result = {
+      pages: data.rows || [],
+      limit: pageLimit,
+      creditsRemaining: user.credits - (pageLimit > 10 ? 1 : 0)
+  };
+  
+  return new Response(JSON.stringify(result), {
+      headers: { 'Content-Type': 'application/json' }
+  });
 }
-
-// Export all functions
-export {
-  getProperties,
-  fetchGSCData,
-  getTopPages
-};
