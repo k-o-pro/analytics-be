@@ -4,18 +4,26 @@ import { Router } from 'itty-router';
 
 const router = Router();
 
+// Define common headers for reuse
+export const corsHeaders = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true'
+};
+
+// Handle OPTIONS requests
+router.options('*', () => {
+    return new Response(null, {
+        status: 204,
+        headers: corsHeaders
+    });
+});
+
 // Get user's GSC properties
 export async function getProperties(request, env) {
   const userId = request.user.user_id;
-  
-  // Define common headers including CORS
-  const headers = {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Credentials': 'true'
-  };
   
   console.log(`Getting GSC properties for user ${userId}`);
   
@@ -37,7 +45,7 @@ export async function getProperties(request, env) {
           needsConnection: true
       }), { 
           status: 400,
-          headers: headers
+          headers: corsHeaders
       });
   }
   
@@ -66,7 +74,7 @@ export async function getProperties(request, env) {
               needsConnection: true
           }), { 
               status: 401,
-              headers: headers
+              headers: corsHeaders
           });
       }
       
@@ -103,7 +111,7 @@ export async function getProperties(request, env) {
               status: response.status
           }), { 
               status: response.status,
-              headers: headers
+              headers: corsHeaders
           });
       }
       
@@ -114,7 +122,7 @@ export async function getProperties(request, env) {
           success: true,
           ...data
       }), {
-          headers: headers
+          headers: corsHeaders
       });
   } catch (error) {
       console.error(`Error fetching GSC properties for user ${userId}:`, error);
@@ -123,17 +131,26 @@ export async function getProperties(request, env) {
           error: `Failed to fetch properties: ${error.message}`
       }), { 
           status: 500,
-          headers: headers
+          headers: corsHeaders
       });
   }
 }
 
 // Fetch GSC data for specified property
 export async function fetchGSCData(request, env) {
-  const userId = request.user.user_id;
-  const { siteUrl, startDate, endDate, dimensions = ['date'] } = await request.json();
-  
-  console.log('Fetching GSC data:', { userId, siteUrl, startDate, endDate, dimensions });
+  const headers = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true'
+  };
+
+  try {
+    const userId = request.user.user_id;
+    const { siteUrl, startDate, endDate, dimensions = ['date'] } = await request.json();
+    
+    console.log('Fetching GSC data:', { userId, siteUrl, startDate, endDate, dimensions });
 
   // Get user's refresh token
   const user = await env.DB.prepare(
@@ -152,25 +169,56 @@ export async function fetchGSCData(request, env) {
   // Get access token using refresh token
   const accessToken = await refreshToken(request, env);
   if (!accessToken) {
-      // Token expired, try to refresh
-      const refreshResult = await refreshToken(request, env);
-      if (!refreshResult.ok) {
-          return refreshResult;
-      }
-      // Get new access token
-      const newAccessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
-      
-      // Validate new token exists
-      if (!newAccessToken) {
-          return new Response('Failed to refresh access token', { 
-              status: 401,
-              headers: { 'Content-Type': 'application/json' }
-          });
-      }
-      
-      accessToken = newAccessToken;
+    return new Response(JSON.stringify({
+      error: 'Failed to get access token'
+    }), { 
+      status: 401,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
-  
+
+  try {
+    const response = await fetch(
+      `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          startDate,
+          endDate,
+          dimensions,
+          rowLimit: 100
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('GSC API error:', errorText);
+      throw new Error(`GSC API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('GSC API response:', data);
+
+    return new Response(JSON.stringify(data), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Error fetching GSC data:', error);
+    return new Response(JSON.stringify({
+      error: 'Failed to fetch GSC data',
+      details: error.message
+    }), { 
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
 router.post('/search-analytics', async (request) => {
     try {
       const { startDate, endDate, siteUrl } = await request.json();
@@ -273,7 +321,7 @@ export async function getTopPages(request, env) {
         needsConnection: true
       }), {
         status: 400,
-        headers: { 'Content-Type': 'application/json' }
+        headers: corsHeaders
       });
     }
 
@@ -317,7 +365,7 @@ export async function getTopPages(request, env) {
       pages,
       creditsRemaining: user.credits
     }), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: corsHeaders
     });
 
   } catch (error) {
@@ -326,9 +374,15 @@ export async function getTopPages(request, env) {
       error: 'Failed to fetch GSC data'
     }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' }
+      headers: corsHeaders
     });
   }
 }
+
+// Add route handlers
+router
+    .get('/properties', getProperties)
+    .post('/search-analytics', fetchGSCData)
+    .get('/top-pages', getTopPages);
 
 export { router };
