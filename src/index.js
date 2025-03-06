@@ -4,7 +4,7 @@ import jwt from '@tsndr/cloudflare-worker-jwt';
 import { createCors } from 'itty-cors';
 
 // Import route handlers
-import { handleAuth, handleLogin, handleCallback, refreshToken, handleRegister } from './auth';
+import { handleAuth, handleLogin, handleCallback, refreshToken, handleRegister, checkSystem, createTestUser, checkUser } from './auth';
 import { fetchGSCData, getProperties, getTopPages } from './gsc';
 import { generateInsights, generatePageInsights } from './insights';
 import { getCredits, useCredits } from './credits';
@@ -182,10 +182,10 @@ router.options('*', (request) => {
 });
 
 // Define auth routes first
-router.post('/auth/register', (request, env) => handleRegister(request, env));
-router.post('/auth/login', (request, env) => handleLogin(request, env));
-router.post('/auth/callback', (request, env) => handleCallback(request, env));
-router.post('/auth/refresh', (request, env) => refreshToken(request, env));
+router.post('/auth/register', handleRegister);
+router.post('/auth/login', handleLogin);
+router.post('/auth/callback', handleCallback);
+router.post('/auth/refresh', refreshToken);
 
 // Define other routes
 router.post('/gsc/data', (request, env) => fetchGSCData(request, env));
@@ -194,28 +194,8 @@ router.get('/gsc/top-pages', (request, env) => getTopPages(request, env));
 
 export default {
   async fetch(request, env, ctx) {
-    // Define common headers for CORS support
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Credentials': 'true',
-    };
-
-    // Handle preflight OPTIONS request
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 204,
-        headers: corsHeaders,
-      });
-    }
-    
-    // Very simple router implementation
-    const url = new URL(request.url);
-    const path = url.pathname;
-    
     try {
-      // Initialize database on every request
+      // Initialize database
       await initializeDatabase(env);
 
       // Handle OPTIONS requests
