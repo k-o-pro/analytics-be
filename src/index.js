@@ -154,18 +154,21 @@ async function refreshUserGSCData(userId, refreshToken, env) {
   );
 }
 
-export default {
-  async fetch(request, env, ctx) {
-    // Define common headers for CORS support
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Credentials': 'true',
-      'Access-Control-Max-Age': '86400',
-    }
-  });
+// Set up CORS
+const { preflight, corsify } = createCors({
+  origins: ['*'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  headers: {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Max-Age': '86400',
+  }
 });
+
+// Create router
+const router = Router();
 
 // System status endpoint - no auth required
 router.get('/system/status', checkSystem);
@@ -183,10 +186,44 @@ router.get('/gsc/properties', getProperties);
 router.post('/gsc/data', fetchGSCData);
 router.get('/gsc/top-pages', getTopPages);
 
+// Define API routes for insights
+router.post('/insights/generate', generateInsights);
+router.post('/insights/page/:path', generatePageInsights);
+
+// Define credit routes
+router.get('/credits', getCredits);
+router.post('/credits/use', useCredits);
+
+// Root path for health check
+router.get('/', (request, env) => {
+  return new Response(JSON.stringify({
+    status: 'ok',
+    message: 'API server is running',
+    version: '1.0.0'
+  }), {
+    status: 200,
+    headers: { 
+      'Content-Type': 'application/json'
+    }
+  });
+});
+
+// Not found handler for unmatched routes
+router.all('*', (request) => {
+  return new Response(JSON.stringify({
+    success: false,
+    error: 'Not found',
+    path: new URL(request.url).pathname
+  }), {
+    status: 404,
+    headers: { 'Content-Type': 'application/json' }
+  });
+});
+
 export default {
   async fetch(request, env, ctx) {
     try {
-      // Initialize database on every request
+      // Initialize database (only on first request or monthly)
       await initializeDatabase(env);
       
       // Check for required environment variables
@@ -201,12 +238,18 @@ export default {
           message: 'The server is missing required configuration.'
         }), {
           status: 500,
-          headers: { 
-            'Content-Type': 'application/json',
-            ...corsHeaders
-          }
+          headers: { 'Content-Type': 'application/json' }
         });
       }
+      
+      // Handle CORS preflight requests
+      if (request.method === 'OPTIONS') {
+        return preflight(request);
+      }
+      
+      // Get the path for easier access
+      const url = new URL(request.url);
+      const path = url.pathname;
       
       // Authentication check for protected routes
       let user = null;
@@ -227,99 +270,24 @@ export default {
         }
         
         // Return unauthorized if not authenticated for protected routes
-        if (!user && path !== '/auth/callback') {
+        if (!user && path !== '/auth/callback' && 
+            !path.startsWith('/system/')) {
           return new Response(JSON.stringify({
             success: false,
             error: 'Unauthorized',
             message: 'Authentication required'
           }), {
             status: 401,
-            headers: {
-              'Content-Type': 'application/json',
-              ...corsHeaders
-            }
+            headers: { 'Content-Type': 'application/json' }
           });
         }
       }
       
-      // Direct path matching for key endpoints
-      if (path === '/auth/register' && request.method === 'POST') {
-        return await handleRegister(request, env);
-      }
+      // Route the request through the router
+      const response = await router.handle(request, env);
       
-      if (path === '/auth/login' && request.method === 'POST') {
-        return await handleLogin(request, env);
-      }
-      
-      if (path === '/auth/callback' && request.method === 'POST') {
-        return await handleCallback(request, env);
-      }
-      
-      if (path === '/auth/refresh' && request.method === 'POST') {
-        return await refreshToken(request, env);
-      }
-      
-      // GSC data routes
-      if (path === '/gsc/properties' && request.method === 'GET') {
-        return await getProperties(request, env);
-      }
-      
-      if (path === '/gsc/data' && request.method === 'POST') {
-        return await fetchGSCData(request, env);
-      }
-      
-      if (path === '/gsc/top-pages' && request.method === 'GET') {
-        return await getTopPages(request, env);
-      }
-      
-      // Analytics & insights routes
-      if (path === '/insights/generate' && request.method === 'POST') {
-        return await generateInsights(request, env);
-      }
-      
-      if (path.startsWith('/insights/page/') && request.method === 'POST') {
-        return await generatePageInsights(request, env);
-      }
-      
-      // Credits management
-      if (path === '/credits' && request.method === 'GET') {
-        return await getCredits(request, env);
-      }
-      
-      if (path === '/credits/use' && request.method === 'POST') {
-        return await useCredits(request, env);
-      }
-      
-      // Root path for health check
-      if (path === '/' && request.method === 'GET') {
-        return new Response(JSON.stringify({
-          status: 'ok',
-          message: 'API server is running',
-          version: '1.0.0'
-        }), {
-          status: 200,
-          headers: { 
-            'Content-Type': 'application/json',
-            ...corsHeaders
-          }
-        });
-      }
-      
-      // If no route matches
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Not found',
-          path: path
-        }),
-        {
-          status: 404,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
-        }
-      );
+      // Apply CORS headers to all responses
+      return corsify(response);
     } catch (error) {
       console.error('Unhandled exception:', error);
       
@@ -331,12 +299,9 @@ export default {
         }),
         {
           status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
+          headers: { 'Content-Type': 'application/json' }
         }
-      ));
+      );
     }
   },
   // Handle scheduled tasks

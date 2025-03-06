@@ -9,7 +9,11 @@ route = "api.analytics.k-o.pro/*"
 
 [vars]
 FRONTEND_URL = "https://analytics.k-o.pro"
-GOOGLE_CLIENT_ID = "724601444957-h1sofo90i307cjln4ds6jbdo601t314m.apps.googleusercontent.com"
+# These sensitive values should be set as environment variables
+# GOOGLE_CLIENT_ID = ""
+# JWT_SECRET = ""
+# PASSWORD_SALT = ""
+# GOOGLE_CLIENT_SECRET = ""
 
 # Replace with actual IDs
 [[kv_namespaces]]
