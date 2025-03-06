@@ -1,34 +1,35 @@
 name: Deploy to Cloudflare Workers
 
-  on:
-    push:
-      branches: [ main ]
-    workflow_dispatch:
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
-  jobs:
-    deploy:
-      runs-on: ubuntu-latest
-      name: Deploy
-      steps:
-        - uses: actions/checkout@v3
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy
+    steps:
+      - uses: actions/checkout@v3
 
-        - name: Setup Node.js
-          uses: actions/setup-node@v3
-          with:
-            node-version: '18'
-            cache: 'npm'
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
 
-        - name: Install dependencies
-          run: npm ci
+      # Reinstall dependencies to fix potential lock file issues
+      - name: Clean install dependencies
+        run: rm -rf node_modules package-lock.json && npm install
 
-        - name: Deploy to Cloudflare Workers
-          uses: cloudflare/wrangler-action@v3
-          with:
-            apiToken: ${{ secrets.CF_API_TOKEN }}
-            accountId: ${{ secrets.CF_ACCOUNT_ID }}
-            command: deploy --env production
-          env:
-            OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-            JWT_SECRET: ${{ secrets.JWT_SECRET }}
-            GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-            GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          command: deploy --env production
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          PASSWORD_SALT: ${{ secrets.PASSWORD_SALT }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
