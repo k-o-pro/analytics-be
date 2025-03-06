@@ -127,6 +127,21 @@ export async function handleRegister(request, env) {
   }
 }
 
+// Add CORS headers to all responses
+const corsHeaders = {
+  'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Max-Age': '86400',
+};
+
+// Handle OPTIONS requests for CORS preflight
+async function handleOptions(request) {
+  return new Response(null, {
+    headers: corsHeaders
+  });
+}
+
 // Handle login
 export async function handleLogin(request) {
   const env = request.env; // Get env from request
@@ -139,6 +154,10 @@ export async function handleLogin(request) {
   };
 
   try {
+    if (request.method === "OPTIONS") {
+      return handleOptions(request);
+    }
+
     const { email, password } = await request.json();
     
     if (!env.JWT_SECRET || !env.PASSWORD_SALT) {
@@ -196,7 +215,10 @@ export async function handleLogin(request) {
         success: true,
         token 
       }), 
-      { status: 200, headers }
+      { status: 200, headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders
+      }}
     );
   } catch (error) {
     console.error('Login error:', error);
@@ -205,7 +227,10 @@ export async function handleLogin(request) {
       error: 'Login failed: ' + error.message
     }), { 
       status: 500,
-      headers 
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders
+      }
     });
   }
 }
