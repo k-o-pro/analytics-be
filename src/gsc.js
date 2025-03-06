@@ -1,29 +1,18 @@
 // Functions to interact with Google Search Console API
 import { refreshToken } from './auth.js';
-import { Router } from 'itty-router';
-
-const router = Router();
-
-// Define common headers for reuse
-export const corsHeaders = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true'
-};
-
-// Handle OPTIONS requests
-router.options('*', () => {
-    return new Response(null, {
-        status: 204,
-        headers: corsHeaders
-    });
-});
 
 // Get user's GSC properties
 export async function getProperties(request, env) {
   const userId = request.user.user_id;
+  
+  // Define common headers including CORS
+  const headers = {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true'
+  };
   
   console.log(`Getting GSC properties for user ${userId}`);
   
@@ -45,7 +34,7 @@ export async function getProperties(request, env) {
           needsConnection: true
       }), { 
           status: 400,
-          headers: corsHeaders
+          headers: headers
       });
   }
   
@@ -74,7 +63,7 @@ export async function getProperties(request, env) {
               needsConnection: true
           }), { 
               status: 401,
-              headers: corsHeaders
+              headers: headers
           });
       }
       
@@ -111,7 +100,7 @@ export async function getProperties(request, env) {
               status: response.status
           }), { 
               status: response.status,
-              headers: corsHeaders
+              headers: headers
           });
       }
       
@@ -122,7 +111,7 @@ export async function getProperties(request, env) {
           success: true,
           ...data
       }), {
-          headers: corsHeaders
+          headers: headers
       });
   } catch (error) {
       console.error(`Error fetching GSC properties for user ${userId}:`, error);
@@ -131,7 +120,7 @@ export async function getProperties(request, env) {
           error: `Failed to fetch properties: ${error.message}`
       }), { 
           status: 500,
-          headers: corsHeaders
+          headers: headers
       });
   }
 }
@@ -321,7 +310,7 @@ export async function getTopPages(request, env) {
         needsConnection: true
       }), {
         status: 400,
-        headers: corsHeaders
+        headers: { 'Content-Type': 'application/json' }
       });
     }
 
@@ -365,7 +354,7 @@ export async function getTopPages(request, env) {
       pages,
       creditsRemaining: user.credits
     }), {
-      headers: corsHeaders
+      headers: { 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
@@ -374,15 +363,7 @@ export async function getTopPages(request, env) {
       error: 'Failed to fetch GSC data'
     }), {
       status: 500,
-      headers: corsHeaders
+      headers: { 'Content-Type': 'application/json' }
     });
   }
 }
-
-// Add route handlers
-router
-    .get('/properties', getProperties)
-    .post('/search-analytics', fetchGSCData)
-    .get('/top-pages', getTopPages);
-
-export { router };
