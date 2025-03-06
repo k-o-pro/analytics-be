@@ -1,5 +1,8 @@
 // Functions to interact with Google Search Console API
 import { refreshToken } from './auth.js';
+import { Router } from 'itty-router';
+
+const router = Router();
 
 // Get user's GSC properties
 export async function getProperties(request, env) {
@@ -327,3 +330,5 @@ export async function getTopPages(request, env) {
     });
   }
 }
+
+export { router };
