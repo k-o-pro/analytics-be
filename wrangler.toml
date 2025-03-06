@@ -24,3 +24,14 @@ database_id = "165cb9e2-49fb-40ee-b02d-58e2c5e072bb"
 [observability]
 enabled = true
 head_sampling_rate = 1
+
+[configuration]
+cors = true
+
+[[headers]]
+pattern = "/*"
+  [headers.response]
+  Access-Control-Allow-Origin = "https://analytics.k-o.pro"
+  Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+  Access-Control-Allow-Headers = "Content-Type, Authorization"
+  Access-Control-Max-Age = "86400"
