@@ -154,6 +154,14 @@ async function refreshUserGSCData(userId, refreshToken, env) {
   );
 }
 
+// Initialize router
+const router = Router();
+
+// Define routes
+router.post('/gsc/data', (request, env) => fetchGSCData(request, env));
+router.get('/gsc/properties', (request, env) => getProperties(request, env));
+router.get('/gsc/top-pages', (request, env) => getTopPages(request, env));
+
 export default {
   async fetch(request, env, ctx) {
     // Define common headers for CORS support
@@ -180,26 +188,9 @@ export default {
       // Initialize database on every request
       await initializeDatabase(env);
       
-      // Check for required environment variables
-      const requiredVars = ['JWT_SECRET', 'PASSWORD_SALT', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'];
-      const missingVars = requiredVars.filter(v => !env[v]);
-      
-      if (missingVars.length > 0) {
-        console.error(`Missing required environment variables: ${missingVars.join(', ')}`);
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Server configuration error',
-          message: 'The server is missing required configuration.'
-        }), {
-          status: 500,
-          headers: { 
-            'Content-Type': 'application/json',
-            ...corsHeaders
-          }
-        });
-      }
-      
-      // Authentication check for protected routes
+      // Authentication handling
+      const url = new URL(request.url);
+      const path = url.pathname;
       let user = null;
       if (path !== '/auth/register' && path !== '/auth/login' && path !== '/') {
         const authHeader = request.headers.get('Authorization');
@@ -219,98 +210,23 @@ export default {
         
         // Return unauthorized if not authenticated for protected routes
         if (!user && path !== '/auth/callback') {
-          return new Response(JSON.stringify({
+          return corsify(new Response(JSON.stringify({
             success: false,
             error: 'Unauthorized',
             message: 'Authentication required'
           }), {
             status: 401,
             headers: {
-              'Content-Type': 'application/json',
-              ...corsHeaders
+              'Content-Type': 'application/json'
             }
-          });
+          }));
         }
       }
-      
-      // Direct path matching for key endpoints
-      if (path === '/auth/register' && request.method === 'POST') {
-        return await handleRegister(request, env);
-      }
-      
-      if (path === '/auth/login' && request.method === 'POST') {
-        return await handleLogin(request, env);
-      }
-      
-      if (path === '/auth/callback' && request.method === 'POST') {
-        return await handleCallback(request, env);
-      }
-      
-      if (path === '/auth/refresh' && request.method === 'POST') {
-        return await refreshToken(request, env);
-      }
-      
-      // GSC data routes
-      if (path === '/gsc/properties' && request.method === 'GET') {
-        return await getProperties(request, env);
-      }
-      
-      if (path === '/gsc/data' && request.method === 'POST') {
-        return await fetchGSCData(request, env);
-      }
-      
-      if (path === '/gsc/top-pages' && request.method === 'GET') {
-        return await getTopPages(request, env);
-      }
-      
-      // Analytics & insights routes
-      if (path === '/insights/generate' && request.method === 'POST') {
-        return await generateInsights(request, env);
-      }
-      
-      if (path.startsWith('/insights/page/') && request.method === 'POST') {
-        return await generatePageInsights(request, env);
-      }
-      
-      // Credits management
-      if (path === '/credits' && request.method === 'GET') {
-        return await getCredits(request, env);
-      }
-      
-      if (path === '/credits/use' && request.method === 'POST') {
-        return await useCredits(request, env);
-      }
-      
-      // Root path for health check
-      if (path === '/' && request.method === 'GET') {
-        return new Response(JSON.stringify({
-          status: 'ok',
-          message: 'API server is running',
-          version: '1.0.0'
-        }), {
-          status: 200,
-          headers: { 
-            'Content-Type': 'application/json',
-            ...corsHeaders
-          }
-        });
-      }
-      
-      // If no route matches
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Not found',
-          path: path
-        }),
-        {
-          status: 404,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
-        }
-      );
+
+      // Handle the request with router and wrap response with CORS
+      const response = await router.handle(request, env);
+      return corsify(response);
+
     } catch (error) {
       console.error('Unhandled exception:', error);
       
@@ -330,7 +246,6 @@ export default {
       );
     }
   },
-  
   // Handle scheduled tasks
   async scheduled(event, env, ctx) {
     try {
