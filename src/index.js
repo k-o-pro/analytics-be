@@ -156,7 +156,7 @@ async function refreshUserGSCData(userId, refreshToken, env) {
 
 // Create CORS handlers
 const { preflight, corsify } = createCors({
-  origins: ['https://analytics.k-o.pro'],
+  origins: [/\.k-o\.pro$/],  // Allow all subdomains of k-o.pro
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   headers: {
     'Access-Control-Allow-Credentials': 'true',
@@ -169,20 +169,16 @@ const router = Router();
 
 // Add CORS preflight handler for all routes
 router.options('*', (request) => {
-  const origin = request.headers.get('Origin') || '';
-  if (origin.match(/\.k-o\.pro$/)) {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': origin,
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Access-Control-Allow-Credentials': 'true',
-        'Access-Control-Max-Age': '86400',
-      }
-    });
-  }
-  return new Response(null, { status: 204 });
+  return new Response(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': 'true',
+      'Access-Control-Max-Age': '86400',
+    }
+  });
 });
 
 // Define auth routes first
@@ -235,22 +231,36 @@ export default {
           error: 'Not Found'
         }), {
           status: 404,
-          headers: { 'Content-Type': 'application/json' }
-        }));
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
+            'Access-Control-Allow-Credentials': 'true'
+          }
+        });
       }
 
-      // Add CORS headers to response
-      return corsify(response);
+      // Add CORS headers if not present
+      if (!response.headers.has('Access-Control-Allow-Origin')) {
+        const origin = request.headers.get('Origin') || '';
+        if (origin.match(/\.k-o\.pro$/)) {
+          response.headers.set('Access-Control-Allow-Origin', origin);
+          response.headers.set('Access-Control-Allow-Credentials', 'true');
+        }
+      }
+
+      return response;
 
     } catch (error) {
       console.error('Unhandled exception:', error);
-      return corsify(new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Server error: ' + error.message,
-        }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Server error: ' + error.message,
+      }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
+          'Access-Control-Allow-Credentials': 'true'
         }
       ));
     }
