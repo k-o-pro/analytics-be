@@ -128,47 +128,50 @@ export async function handleRegister(request, env) {
 }
 
 // Add CORS headers to all responses
-const corsHeaders = {
-  'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+const getCorsHeaders = (env) => ({
+  'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Credentials': 'true',
   'Access-Control-Max-Age': '86400',
-};
+});
 
 // Handle OPTIONS requests for CORS preflight
 async function handleOptions(request) {
   return new Response(null, {
-    headers: corsHeaders
+    headers: getCorsHeaders(request.env)
   });
 }
 
 // Handle login
 export async function handleLogin(request) {
-  const env = request.env; // Get env from request
+  const env = request.env;
   const headers = {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Credentials': 'true'
+    ...getCorsHeaders(env)
   };
 
   try {
+    // Handle OPTIONS request
     if (request.method === "OPTIONS") {
-      return handleOptions(request);
+      return new Response(null, { headers });
     }
 
     const { email, password } = await request.json();
     
+    if (!email || !password) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Email and password are required'
+      }), { status: 400, headers });
+    }
+
     if (!env.JWT_SECRET || !env.PASSWORD_SALT) {
       console.error('Missing JWT_SECRET or PASSWORD_SALT environment variables');
       return new Response(JSON.stringify({
         success: false,
         error: 'Server configuration error'
-      }), { 
-        status: 500,
-        headers 
-      });
+      }), { status: 500, headers });
     }
 
     // Query the database for user
@@ -180,23 +183,17 @@ export async function handleLogin(request) {
       return new Response(JSON.stringify({
         success: false,
         error: 'Invalid email or password'
-      }), { 
-        status: 401,
-        headers 
-      });
+      }), { status: 401, headers });
     }
 
-    // Verify password (in production, use bcrypt or similar)
+    // Verify password
     const passwordValid = await verifyPassword(password, user.password_hash, env.PASSWORD_SALT);
     
     if (!passwordValid) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Invalid credentials'
-        }), 
-        { status: 401, headers }
-      );
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Invalid credentials'
+      }), { status: 401, headers });
     }
     
     // Generate JWT token
@@ -210,28 +207,17 @@ export async function handleLogin(request) {
       'UPDATE users SET last_login = datetime() WHERE id = ?'
     ).bind(user.id).run();
     
-    return new Response(
-      JSON.stringify({ 
-        success: true,
-        token 
-      }), 
-      { status: 200, headers: {
-        'Content-Type': 'application/json',
-        ...corsHeaders
-      }}
-    );
+    return new Response(JSON.stringify({ 
+      success: true,
+      token 
+    }), { status: 200, headers });
+
   } catch (error) {
     console.error('Login error:', error);
     return new Response(JSON.stringify({
       success: false,
       error: 'Login failed: ' + error.message
-    }), { 
-      status: 500,
-      headers: {
-        'Content-Type': 'application/json',
-        ...corsHeaders
-      }
-    });
+    }), { status: 500, headers });
   }
 }
 

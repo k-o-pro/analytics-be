@@ -157,7 +157,7 @@ async function refreshUserGSCData(userId, refreshToken, env) {
 // Create CORS handlers
 const { preflight, corsify } = createCors({
   origins: ['https://analytics.k-o.pro'],
-  methods: ['GET', 'POST', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   headers: {
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
@@ -167,8 +167,23 @@ const { preflight, corsify } = createCors({
 // Initialize router with CORS
 const router = Router();
 
-// Add CORS preflight handler
-router.options('*', preflight);
+// Add CORS preflight handler for all routes
+router.options('*', (request) => {
+  const origin = request.headers.get('Origin') || '';
+  if (origin.match(/\.k-o\.pro$/)) {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Max-Age': '86400',
+      }
+    });
+  }
+  return new Response(null, { status: 204 });
+});
 
 // Define auth routes first
 router.post('/auth/register', (request, env) => handleRegister(request, env));
@@ -206,8 +221,8 @@ export default {
     try {
       // Initialize database on every request
       await initializeDatabase(env);
-      
-      // OPTIONS requests should be handled by the preflight handler
+
+      // Handle OPTIONS requests
       if (request.method === 'OPTIONS') {
         return preflight(request);
       }
@@ -215,27 +230,29 @@ export default {
       // Handle the request with router and wrap response with CORS
       const response = await router.handle(request, env);
       if (!response) {
-        return new Response('Not Found', { status: 404 });
+        return corsify(new Response(JSON.stringify({
+          success: false,
+          error: 'Not Found'
+        }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        }));
       }
+
+      // Add CORS headers to response
       return corsify(response);
 
     } catch (error) {
       console.error('Unhandled exception:', error);
-      
-      // Return a generic error response
-      return new Response(
+      return corsify(new Response(
         JSON.stringify({
           success: false,
           error: 'Server error: ' + error.message,
-        }),
-        {
+        }), {
           status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
+          headers: { 'Content-Type': 'application/json' }
         }
-      );
+      ));
     }
   },
   // Handle scheduled tasks
