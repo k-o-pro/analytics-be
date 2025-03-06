@@ -154,10 +154,29 @@ async function refreshUserGSCData(userId, refreshToken, env) {
   );
 }
 
-// Initialize router
+// Create CORS handlers
+const { preflight, corsify } = createCors({
+  origins: ['https://analytics.k-o.pro'],
+  methods: ['GET', 'POST', 'OPTIONS'],
+  headers: {
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  }
+});
+
+// Initialize router with CORS
 const router = Router();
 
-// Define routes
+// Add CORS preflight handler
+router.options('*', preflight);
+
+// Define auth routes first
+router.post('/auth/register', (request, env) => handleRegister(request, env));
+router.post('/auth/login', (request, env) => handleLogin(request, env));
+router.post('/auth/callback', (request, env) => handleCallback(request, env));
+router.post('/auth/refresh', (request, env) => refreshToken(request, env));
+
+// Define other routes
 router.post('/gsc/data', (request, env) => fetchGSCData(request, env));
 router.get('/gsc/properties', (request, env) => getProperties(request, env));
 router.get('/gsc/top-pages', (request, env) => getTopPages(request, env));
@@ -188,43 +207,16 @@ export default {
       // Initialize database on every request
       await initializeDatabase(env);
       
-      // Authentication handling
-      const url = new URL(request.url);
-      const path = url.pathname;
-      let user = null;
-      if (path !== '/auth/register' && path !== '/auth/login' && path !== '/') {
-        const authHeader = request.headers.get('Authorization');
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-          const token = authHeader.split(' ')[1];
-          try {
-            const verified = await jwt.verify(token, env.JWT_SECRET);
-            if (verified) {
-              user = verified.payload;
-              // Attach user to request object
-              request.user = user;
-            }
-          } catch (error) {
-            console.error('JWT verification error:', error);
-          }
-        }
-        
-        // Return unauthorized if not authenticated for protected routes
-        if (!user && path !== '/auth/callback') {
-          return corsify(new Response(JSON.stringify({
-            success: false,
-            error: 'Unauthorized',
-            message: 'Authentication required'
-          }), {
-            status: 401,
-            headers: {
-              'Content-Type': 'application/json'
-            }
-          }));
-        }
+      // OPTIONS requests should be handled by the preflight handler
+      if (request.method === 'OPTIONS') {
+        return preflight(request);
       }
 
       // Handle the request with router and wrap response with CORS
       const response = await router.handle(request, env);
+      if (!response) {
+        return new Response('Not Found', { status: 404 });
+      }
       return corsify(response);
 
     } catch (error) {

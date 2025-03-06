@@ -128,46 +128,45 @@ export async function handleRegister(request, env) {
 }
 
 // Handle login
-export async function handleLogin(request, env) {
+export async function handleLogin(request) {
+  const env = request.env; // Get env from request
+  const headers = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Credentials': 'true'
+  };
+
   try {
     const { email, password } = await request.json();
     
-    // Content-Type header for all responses
-    const headers = {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-      'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      'Access-Control-Allow-Credentials': 'true'
-    };
-    
-    // Check if JWT_SECRET and PASSWORD_SALT are defined
     if (!env.JWT_SECRET || !env.PASSWORD_SALT) {
       console.error('Missing JWT_SECRET or PASSWORD_SALT environment variables');
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Server configuration error'
-        }),
-        { status: 500, headers }
-      );
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Server configuration error'
+      }), { 
+        status: 500,
+        headers 
+      });
     }
-    
+
     // Query the database for user
     const user = await env.DB.prepare(
       'SELECT id, email, password_hash FROM users WHERE email = ?'
     ).bind(email).first();
-    
+
     if (!user) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Invalid credentials'
-        }), 
-        { status: 401, headers }
-      );
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Invalid email or password'
+      }), { 
+        status: 401,
+        headers 
+      });
     }
-    
+
     // Verify password (in production, use bcrypt or similar)
     const passwordValid = await verifyPassword(password, user.password_hash, env.PASSWORD_SALT);
     
@@ -201,23 +200,13 @@ export async function handleLogin(request, env) {
     );
   } catch (error) {
     console.error('Login error:', error);
-    
-    return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: 'Login failed: ' + error.message 
-      }), 
-      { 
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-          'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Allow-Credentials': 'true'
-        }
-      }
-    );
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'Login failed: ' + error.message
+    }), { 
+      status: 500,
+      headers 
+    });
   }
 }
 
