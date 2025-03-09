@@ -156,8 +156,9 @@ async function refreshUserGSCData(userId, refreshToken, env) {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Name-Version',
+  'Access-Control-Allow-Credentials': 'true',
   'Access-Control-Max-Age': '86400',
 };
 
@@ -167,47 +168,14 @@ export default {
       // Handle CORS preflight requests
       if (request.method === 'OPTIONS') {
         return new Response(null, {
-          headers: corsHeaders
-        });
-      }
-
-      const corsHeaders = {
-        'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
-        'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Name-Version',
-        'Access-Control-Allow-Credentials': 'true',
-        'Access-Control-Max-Age': '86400',
-      };
-
-      function handleOptions(request) {
-        const headers = request.headers;
-        
-        if (
-          headers.get('Origin') !== null &&
-          headers.get('Access-Control-Request-Method') !== null &&
-          headers.get('Access-Control-Request-Headers') !== null
-        ) {
-          return new Response(null, {
-            status: 204,
-            headers: {
-              ...corsHeaders,
-              'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers'),
-            },
-          });
-        }
-        
-        return new Response(null, {
+          status: 204,
           headers: {
-            Allow: 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-          },
+            ...corsHeaders,
+            'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers'),
+          }
         });
       }
 
-      // Handle CORS preflight
-      if (request.method === 'OPTIONS') {
-        return handleOptions(request);
-      }
-      
       // Very simple router implementation
       const url = new URL(request.url);
       const path = url.pathname;
@@ -269,52 +237,118 @@ export default {
           }
         }
         
+        // Add CORS headers to every response
+        const createResponse = (body, status = 200) => {
+          return new Response(JSON.stringify(body), {
+            status,
+            headers: {
+              'Content-Type': 'application/json',
+              ...corsHeaders
+            }
+          });
+        };
+
         // Direct path matching for key endpoints
         if (path === '/auth/register' && request.method === 'POST') {
-          return await handleRegister(request, env);
+          const response = await handleRegister(request, env);
+          // Add CORS headers to the response
+          Object.keys(corsHeaders).forEach(key => {
+            response.headers.set(key, corsHeaders[key]);
+          });
+          return response;
         }
         
         if (path === '/auth/login' && request.method === 'POST') {
-          return await handleLogin(request, env);
+          const response = await handleLogin(request, env);
+          // Add CORS headers to the response
+          Object.keys(corsHeaders).forEach(key => {
+            response.headers.set(key, corsHeaders[key]);
+          });
+          return response;
         }
         
         if (path === '/auth/callback' && request.method === 'POST') {
-          return await handleCallback(request, env);
+          const response = await handleCallback(request, env);
+          // Add CORS headers to the response
+          Object.keys(corsHeaders).forEach(key => {
+            response.headers.set(key, corsHeaders[key]);
+          });
+          return response;
         }
         
         if (path === '/auth/refresh' && request.method === 'POST') {
-          return await refreshToken(request, env);
+          const response = await refreshToken(request, env);
+          // Add CORS headers to the response
+          Object.keys(corsHeaders).forEach(key => {
+            response.headers.set(key, corsHeaders[key]);
+          });
+          return response;
         }
         
         // GSC data routes
         if (path === '/gsc/properties' && request.method === 'GET') {
-          return await getProperties(request, env);
+          const response = await getProperties(request, env);
+          // Add CORS headers to the response
+          Object.keys(corsHeaders).forEach(key => {
+            response.headers.set(key, corsHeaders[key]);
+          });
+          return response;
         }
         
         if (path === '/gsc/data' && request.method === 'POST') {
-          return await fetchGSCData(request, env);
+          const response = await fetchGSCData(request, env);
+          // Add CORS headers to the response
+          Object.keys(corsHeaders).forEach(key => {
+            response.headers.set(key, corsHeaders[key]);
+          });
+          return response;
         }
         
         if (path === '/gsc/top-pages' && request.method === 'GET') {
-          return await getTopPages(request, env);
+          const response = await getTopPages(request, env);
+          // Add CORS headers to the response
+          Object.keys(corsHeaders).forEach(key => {
+            response.headers.set(key, corsHeaders[key]);
+          });
+          return response;
         }
         
         // Analytics & insights routes
         if (path === '/insights/generate' && request.method === 'POST') {
-          return await generateInsights(request, env);
+          const response = await generateInsights(request, env);
+          // Add CORS headers to the response
+          Object.keys(corsHeaders).forEach(key => {
+            response.headers.set(key, corsHeaders[key]);
+          });
+          return response;
         }
         
         if (path.startsWith('/insights/page/') && request.method === 'POST') {
-          return await generatePageInsights(request, env);
+          const response = await generatePageInsights(request, env);
+          // Add CORS headers to the response
+          Object.keys(corsHeaders).forEach(key => {
+            response.headers.set(key, corsHeaders[key]);
+          });
+          return response;
         }
         
         // Credits management
         if (path === '/credits' && request.method === 'GET') {
-          return await getCredits(request, env);
+          const response = await getCredits(request, env);
+          // Add CORS headers to the response
+          Object.keys(corsHeaders).forEach(key => {
+            response.headers.set(key, corsHeaders[key]);
+          });
+          return response;
         }
         
         if (path === '/credits/use' && request.method === 'POST') {
-          return await useCredits(request, env);
+          const response = await useCredits(request, env);
+          // Add CORS headers to the response
+          Object.keys(corsHeaders).forEach(key => {
+            response.headers.set(key, corsHeaders[key]);
+          });
+          return response;
         }
         
         // Root path for health check
@@ -333,53 +367,24 @@ export default {
         }
         
         // If no route matches
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Not found',
-            path: path
-          }),
-          {
-            status: 404,
-            headers: {
-              'Content-Type': 'application/json',
-              ...corsHeaders,
-            },
-          }
-        );
+        return createResponse({
+          success: false,
+          error: 'Not found',
+          path: path
+        }, 404);
+
       } catch (error) {
         console.error('Unhandled exception:', error);
-        
-        // Return a generic error response
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'Server error: ' + error.message,
-          }),
-          {
-            status: 500,
-            headers: {
-              'Content-Type': 'application/json',
-              ...corsHeaders,
-            },
-          }
-        );
+        return createResponse({
+          success: false,
+          error: 'Server error: ' + error.message,
+        }, 500);
       }
     } catch (error) {
-      // Add CORS headers to error responses too
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: error.message
-        }),
-        {
-          status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders
-          }
-        }
-      );
+      return createResponse({
+        success: false,
+        error: error.message
+      }, 500);
     }
   },
   
