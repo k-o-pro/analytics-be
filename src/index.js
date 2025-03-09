@@ -156,7 +156,6 @@ async function refreshUserGSCData(userId, refreshToken, env) {
 
 export default {
   async fetch(request, env, ctx) {
-
     const corsHeaders = {
       'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
       'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
@@ -165,7 +164,6 @@ export default {
       'Access-Control-Max-Age': '86400',
     };
     
-    // Update the handleOptions function (around line 167-183):
     function handleOptions(request) {
       if (
         request.headers.get('Origin') !== null &&
@@ -183,13 +181,6 @@ export default {
         headers: {
           Allow: 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
           ...corsHeaders,
-        },
-      });
-    }
-      
-      return new Response(null, {
-        headers: {
-          Allow: 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
         },
       });
     }
