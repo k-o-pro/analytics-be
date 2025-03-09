@@ -156,31 +156,35 @@ async function refreshUserGSCData(userId, refreshToken, env) {
 
 export default {
   async fetch(request, env, ctx) {
+
     const corsHeaders = {
-      'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+      'Access-Control-Allow-Origin': env.FRONTEND_URL || 'https://analytics.k-o.pro',
       'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Name-Version',
       'Access-Control-Allow-Credentials': 'true',
       'Access-Control-Max-Age': '86400',
     };
-    
+
     function handleOptions(request) {
+      const headers = request.headers;
+      
       if (
-        request.headers.get('Origin') !== null &&
-        request.headers.get('Access-Control-Request-Method') !== null
+        headers.get('Origin') !== null &&
+        headers.get('Access-Control-Request-Method') !== null &&
+        headers.get('Access-Control-Request-Headers') !== null
       ) {
         return new Response(null, {
+          status: 204,
           headers: {
             ...corsHeaders,
-            'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers') || corsHeaders['Access-Control-Allow-Headers'],
+            'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers'),
           },
         });
       }
-    
+      
       return new Response(null, {
         headers: {
           Allow: 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-          ...corsHeaders,
         },
       });
     }
