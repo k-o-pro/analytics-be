@@ -3,7 +3,6 @@ main = "src/index.js"
 compatibility_date = "2025-03-01"
 compatibility_flags = ["nodejs_compat"]
 
-[env.production]
 workers_dev = false
 route = "api.analytics.k-o.pro/*"
 
