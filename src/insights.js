@@ -1,33 +1,46 @@
 // Functions to generate insights using OpenAI API
-  
-  // Generate overall insights
-  export async function generateInsights(request, env) {
+
+// Generate overall insights
+export async function generateInsights(request, env) {
+  try {
     const userId = request.user.user_id;
     const { siteUrl, period, data } = await request.json();
-    
+
+    if (!siteUrl) {
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Site URL is required'
+      }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+
     // Check if user has already generated insights today
     const today = new Date().toISOString().split('T')[0];
     const existingInsight = await env.DB.prepare(
       `SELECT id FROM insights 
        WHERE user_id = ? AND site_url = ? AND date = ? AND type = 'overall'`
     ).bind(userId, siteUrl, today).first();
-    
+
     // If insights exist and not forced refresh, return cached version
     if (existingInsight && !request.url.includes('force=true')) {
       const insight = await env.DB.prepare(
         'SELECT content FROM insights WHERE id = ?'
       ).bind(existingInsight.id).first();
-      
+
       return new Response(insight.content, {
         headers: { 'Content-Type': 'application/json' }
       });
     }
-    
+
     // Check credit usage for insights generation
     const user = await env.DB.prepare(
       'SELECT credits FROM users WHERE id = ?'
     ).bind(userId).first();
-    
+
     if (user.credits < 1) {
       return new Response(JSON.stringify({
         error: 'Insufficient credits for insights generation'
@@ -36,7 +49,7 @@
         headers: { 'Content-Type': 'application/json' }
       });
     }
-    
+
     // Prepare data for OpenAI
     const prompt = `
       Generate insights for a website based on the following Google Search Console data:
@@ -60,7 +73,7 @@
         "recommendations": [ {"title": "...", "description": "...", "priority": "high/medium/low"} ]
       }
     `;
-    
+
     // Call OpenAI API
     const openaiResponse = await fetch(env.OPENAI_API_URL, {
       method: 'POST',
@@ -76,14 +89,14 @@
         ]
       })
     });
-    
+
     if (!openaiResponse.ok) {
       return new Response('Failed to generate insights', { status: openaiResponse.status });
     }
-    
+
     const openaiData = await openaiResponse.json();
     const generatedInsights = openaiData.choices[0].message.content;
-    
+
     // Store insights in database
     await env.DB.prepare(
       `INSERT OR REPLACE INTO insights (user_id, site_url, date, type, content, created_at)
@@ -95,19 +108,31 @@
       generatedInsights,
       new Date().toISOString()
     ).run();
-    
+
     // Deduct credit
     await env.DB.prepare(
       'UPDATE users SET credits = credits - 1 WHERE id = ?'
     ).bind(userId).run();
-    
+
     return new Response(generatedInsights, {
       headers: { 'Content-Type': 'application/json' }
     });
+  } catch (error) {
+    console.error('Error in generateInsights:', error);
+    return new Response(JSON.stringify({
+      success: false,
+      error: 'Failed to generate insights'
+    }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
   }
-  
-  // Generate page-specific insights
-  export async function generatePageInsights(request, env) {
-    // Similar to generateInsights, but focused on a specific page
-    // ...
-  }
+}
+
+// Generate page-specific insights
+export async function generatePageInsights(request, env) {
+  // Similar to generateInsights, but focused on a specific page
+  // ...
+}
