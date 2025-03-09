@@ -162,6 +162,17 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 };
 
+// Helper function to create standardized responses
+const createResponse = (body, status = 200) => {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      ...corsHeaders
+    }
+  });
+};
+
 export default {
   async fetch(request, env, ctx) {
     try {
@@ -315,12 +326,39 @@ export default {
         
         // Analytics & insights routes
         if (path === '/insights/generate' && request.method === 'POST') {
-          const response = await generateInsights(request, env);
-          // Add CORS headers to the response
-          Object.keys(corsHeaders).forEach(key => {
-            response.headers.set(key, corsHeaders[key]);
-          });
-          return response;
+          try {
+            const body = await request.json();
+            
+            // Validate required fields
+            if (!body.siteUrl) {
+              return createResponse({
+                success: false,
+                error: 'Site URL is required'
+              }, 400);
+            }
+
+            // Validate URL format
+            try {
+              new URL(body.siteUrl);
+            } catch (e) {
+              return createResponse({
+                success: false,
+                error: 'Invalid site URL format'
+              }, 400);
+            }
+
+            const response = await generateInsights(request, env);
+            Object.keys(corsHeaders).forEach(key => {
+              response.headers.set(key, corsHeaders[key]);
+            });
+            return response;
+          } catch (error) {
+            console.error('Error generating insights:', error);
+            return createResponse({
+              success: false,
+              error: 'Failed to generate insights: ' + error.message
+            }, 500);
+          }
         }
         
         if (path.startsWith('/insights/page/') && request.method === 'POST') {
