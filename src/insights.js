@@ -6,12 +6,31 @@ export async function generateInsights(request, env) {
     const userId = request.user.user_id;
     const { siteUrl, period, data } = await request.json();
 
+    // Enhanced validation
     if (!siteUrl) {
       return new Response(JSON.stringify({
         success: false,
         error: 'Site URL is required'
       }), {
         status: 400,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+    
+    // Validate required OpenAI environment variables
+    if (!env.OPENAI_API_KEY || !env.OPENAI_API_URL) {
+      console.error('Missing OpenAI configuration:', {
+        hasApiKey: !!env.OPENAI_API_KEY,
+        hasApiUrl: !!env.OPENAI_API_URL
+      });
+      
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Server configuration error'
+      }), {
+        status: 500,
         headers: {
           'Content-Type': 'application/json'
         }
@@ -74,29 +93,71 @@ export async function generateInsights(request, env) {
       }
     `;
 
-    // Call OpenAI API
-    const openaiResponse = await fetch(env.OPENAI_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: "gpt-4",
-        messages: [
-          { role: "system", content: "You are an SEO and website analytics expert. Provide concise, actionable insights." },
-          { role: "user", content: prompt }
-        ]
-      })
+    // Prepare a safe version of the data to send to OpenAI
+    const safeData = data ? {
+      // Don't send potentially large datasets to OpenAI
+      // Just include critical metrics and summary data
+      property: data.property || siteUrl,
+      period: period,
+      targetUrl: data.targetPageUrl || null,
+      // Add other safe fields as needed
+    } : { property: siteUrl, period: period };
+    
+    // Enhanced debugging for request
+    console.log('Calling OpenAI with request data:', {
+      url: env.OPENAI_API_URL,
+      model: "gpt-3.5-turbo", // Using a more widely available model
+      apiKeyLength: env.OPENAI_API_KEY ? env.OPENAI_API_KEY.length : 0,
+      promptLength: prompt.length
     });
 
-    if (!openaiResponse.ok) {
-      // Log the detailed error for debugging
-      const errorText = await openaiResponse.text();
-      console.error('OpenAI API error:', openaiResponse.status, errorText);
+    // Call OpenAI API with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    let openaiResponse;
+    
+    try {
+      openaiResponse = await fetch(env.OPENAI_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: "gpt-3.5-turbo", // Using a more widely available model
+          messages: [
+            { role: "system", content: "You are an SEO and website analytics expert. Provide concise, actionable insights." },
+            { role: "user", content: prompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 800
+        }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId); // Clear the timeout if the request completes
+
+      if (!openaiResponse.ok) {
+        // Log the detailed error for debugging
+        const errorText = await openaiResponse.text();
+        console.error('OpenAI API error:', openaiResponse.status, errorText);
+        return new Response(JSON.stringify({
+          success: false,
+          error: `OpenAI API error: ${openaiResponse.status}`,
+          details: errorText
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      console.error('OpenAI fetch error:', fetchError);
       return new Response(JSON.stringify({
         success: false,
-        error: `OpenAI API error: ${openaiResponse.status}`
+        error: fetchError.name === 'AbortError' 
+          ? 'OpenAI request timed out' 
+          : 'Failed to connect to OpenAI service'
       }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
@@ -104,55 +165,116 @@ export async function generateInsights(request, env) {
     }
 
     // Additional validation for OpenAI response
-    const openaiData = await openaiResponse.json();
-    if (!openaiData.choices || !openaiData.choices[0] || !openaiData.choices[0].message) {
-      console.error('Invalid OpenAI response format:', openaiData);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Invalid response from AI service'
-      }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    // Parse JSON response from OpenAI or use as-is if already JSON
-    let generatedInsights;
+    let openaiData;
     try {
-      const content = openaiData.choices[0].message.content;
-      // Check if the content is already in JSON format
-      if (typeof content === 'string' && content.trim().startsWith('{')) {
-        generatedInsights = JSON.parse(content);
-      } else {
-        generatedInsights = content;
+      openaiData = await openaiResponse.json();
+      if (!openaiData.choices || !openaiData.choices[0] || !openaiData.choices[0].message) {
+        console.error('Invalid OpenAI response format:', openaiData);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Invalid response from AI service'
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
-    } catch (error) {
-      console.error('Failed to parse OpenAI response as JSON:', error);
+      
+      // Parse JSON response from OpenAI or use as-is if already JSON
+      let generatedInsights;
+      try {
+        const content = openaiData.choices[0].message.content;
+        console.log('Raw OpenAI response content:', content.substring(0, 100) + '...');
+        
+        // Check if the content is already in JSON format
+        if (typeof content === 'string' && content.trim().startsWith('{')) {
+          generatedInsights = JSON.parse(content);
+        } else {
+          // If not JSON, create a simple structured response
+          generatedInsights = {
+            summary: "Analysis of your site's performance",
+            performance: { 
+              trend: "stable", 
+              details: "Not enough data for detailed trend analysis." 
+            },
+            topFindings: [
+              {
+                title: "Basic SEO analysis",
+                description: content.substring(0, 200) // Include part of the raw response
+              }
+            ],
+            recommendations: [
+              {
+                title: "General recommendation",
+                description: "Check Google Search Console for more detailed data.",
+                priority: "medium"
+              }
+            ]
+          };
+        }
+      } catch (error) {
+        console.error('Failed to parse OpenAI response as JSON:', error);
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Failed to parse AI response'
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    } catch (jsonError) {
+      console.error('Failed to parse OpenAI HTTP response:', jsonError);
       return new Response(JSON.stringify({
         success: false,
-        error: 'Failed to parse AI response'
+        error: 'Failed to read AI service response'
       }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    // Store insights in database
-    await env.DB.prepare(
-      `INSERT OR REPLACE INTO insights (user_id, site_url, date, type, content, created_at)
-       VALUES (?, ?, ?, 'overall', ?, ?)`
-    ).bind(
-      userId,
-      siteUrl,
-      today,
-      typeof generatedInsights === 'string' ? generatedInsights : JSON.stringify(generatedInsights),
-      new Date().toISOString()
-    ).run();
+    // Use database transaction to ensure atomic operations
+    try {
+      // Begin transaction
+      await env.DB.exec('BEGIN TRANSACTION');
+      
+      // Store insights in database
+      await env.DB.prepare(
+        `INSERT OR REPLACE INTO insights (user_id, site_url, date, type, content, created_at)
+         VALUES (?, ?, ?, 'overall', ?, ?)`
+      ).bind(
+        userId,
+        siteUrl,
+        today,
+        typeof generatedInsights === 'string' ? generatedInsights : JSON.stringify(generatedInsights),
+        new Date().toISOString()
+      ).run();
 
-    // Deduct credit
-    await env.DB.prepare(
-      'UPDATE users SET credits = credits - 1 WHERE id = ?'
-    ).bind(userId).run();
+      // Deduct credit
+      await env.DB.prepare(
+        'UPDATE users SET credits = credits - 1 WHERE id = ?'
+      ).bind(userId).run();
+      
+      // Commit transaction
+      await env.DB.exec('COMMIT');
+      
+      console.log('Insights generated and stored successfully for user:', userId);
+    } catch (dbError) {
+      // Rollback on error
+      try {
+        await env.DB.exec('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Failed to rollback transaction:', rollbackError);
+      }
+      
+      console.error('Database error during insights generation:', dbError);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Failed to store insights'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
 
     // Return the insights as a proper JSON response
     return new Response(
@@ -163,11 +285,25 @@ export async function generateInsights(request, env) {
     );
   } catch (error) {
     console.error('Error in generateInsights:', error);
+    // Provide more specific error message based on the error type
+    let errorMessage = 'Failed to generate insights';
+    let statusCode = 500;
+    
+    if (error.name === 'SyntaxError' && error.message.includes('JSON')) {
+      errorMessage = 'Invalid request format';
+      statusCode = 400;
+    } else if (error.message && error.message.includes('user_id')) {
+      errorMessage = 'Authentication required';
+      statusCode = 401;
+    }
+    
     return new Response(JSON.stringify({
       success: false,
-      error: 'Failed to generate insights'
+      error: errorMessage,
+      errorType: error.name,
+      errorDetails: process.env.NODE_ENV === 'development' ? error.message : undefined
     }), {
-      status: 500,
+      status: statusCode,
       headers: {
         'Content-Type': 'application/json'
       }
