@@ -91,11 +91,51 @@ export async function generateInsights(request, env) {
     });
 
     if (!openaiResponse.ok) {
-      return new Response('Failed to generate insights', { status: openaiResponse.status });
+      // Log the detailed error for debugging
+      const errorText = await openaiResponse.text();
+      console.error('OpenAI API error:', openaiResponse.status, errorText);
+      return new Response(JSON.stringify({
+        success: false,
+        error: `OpenAI API error: ${openaiResponse.status}`
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
+    // Additional validation for OpenAI response
     const openaiData = await openaiResponse.json();
-    const generatedInsights = openaiData.choices[0].message.content;
+    if (!openaiData.choices || !openaiData.choices[0] || !openaiData.choices[0].message) {
+      console.error('Invalid OpenAI response format:', openaiData);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Invalid response from AI service'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Parse JSON response from OpenAI or use as-is if already JSON
+    let generatedInsights;
+    try {
+      const content = openaiData.choices[0].message.content;
+      // Check if the content is already in JSON format
+      if (typeof content === 'string' && content.trim().startsWith('{')) {
+        generatedInsights = JSON.parse(content);
+      } else {
+        generatedInsights = content;
+      }
+    } catch (error) {
+      console.error('Failed to parse OpenAI response as JSON:', error);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Failed to parse AI response'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
 
     // Store insights in database
     await env.DB.prepare(
@@ -105,7 +145,7 @@ export async function generateInsights(request, env) {
       userId,
       siteUrl,
       today,
-      generatedInsights,
+      typeof generatedInsights === 'string' ? generatedInsights : JSON.stringify(generatedInsights),
       new Date().toISOString()
     ).run();
 
@@ -114,9 +154,13 @@ export async function generateInsights(request, env) {
       'UPDATE users SET credits = credits - 1 WHERE id = ?'
     ).bind(userId).run();
 
-    return new Response(generatedInsights, {
-      headers: { 'Content-Type': 'application/json' }
-    });
+    // Return the insights as a proper JSON response
+    return new Response(
+      typeof generatedInsights === 'string' ? generatedInsights : JSON.stringify(generatedInsights), 
+      {
+        headers: { 'Content-Type': 'application/json' }
+      }
+    );
   } catch (error) {
     console.error('Error in generateInsights:', error);
     return new Response(JSON.stringify({
