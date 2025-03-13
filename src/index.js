@@ -324,50 +324,63 @@ export default {
           return response;
         }
         
-        // Analytics & insights routes
-        if (path === '/insights/generate' && request.method === 'POST') {
-          try {
-            const body = await request.json();
-            
-            // Validate required fields
-            if (!body.siteUrl) {
-              return createResponse({
-                success: false,
-                error: 'Site URL is required'
-              }, 400);
-            }
-
-            // Validate URL format
-            try {
-              new URL(body.siteUrl);
-            } catch (e) {
-              return createResponse({
-                success: false,
-                error: 'Invalid site URL format'
-              }, 400);
-            }
-
-            const response = await generateInsights(request, env);
-            Object.keys(corsHeaders).forEach(key => {
-              response.headers.set(key, corsHeaders[key]);
-            });
-            return response;
-          } catch (error) {
-            console.error('Error generating insights:', error);
+        // Handle insights routes
+        if (url.pathname.startsWith('/insights')) {
+          // Ensure the user is authenticated for all insights routes
+          if (!user) {
             return createResponse({
               success: false,
-              error: 'Failed to generate insights: ' + error.message
-            }, 500);
+              error: 'Authentication required',
+              message: 'Authentication required'
+            }, 401);
           }
-        }
-        
-        if (path.startsWith('/insights/page/') && request.method === 'POST') {
-          const response = await generatePageInsights(request, env);
-          // Add CORS headers to the response
-          Object.keys(corsHeaders).forEach(key => {
-            response.headers.set(key, corsHeaders[key]);
-          });
-          return response;
+          
+          // Generate site-level insights
+          if (url.pathname === '/insights/generate') {
+            // Clone the request before passing it to the insights handler to avoid "Body already used" errors
+            const clonedRequest = request.clone();
+            // Attach the user data to the request object for access in the insights generator
+            clonedRequest.user = user;
+            
+            try {
+              const response = await generateInsights(clonedRequest, env);
+              return response;
+            } catch (error) {
+              console.error('Error generating insights:', error);
+              return createResponse({
+                success: false,
+                error: 'Failed to generate insights',
+                message: error.message
+              }, 500);
+            }
+          }
+          
+          // Generate page-specific insights
+          if (url.pathname.startsWith('/insights/page/')) {
+            // Clone the request before passing it to the insights handler to avoid "Body already used" errors
+            const clonedRequest = request.clone();
+            // Attach the user data to the request object for access in the insights generator
+            clonedRequest.user = user;
+            
+            try {
+              const response = await generatePageInsights(clonedRequest, env);
+              return response;
+            } catch (error) {
+              console.error('Error generating page insights:', error);
+              return createResponse({
+                success: false,
+                error: 'Failed to generate page insights',
+                message: error.message
+              }, 500);
+            }
+          }
+          
+          // If no matching route
+          return createResponse({
+            success: false,
+            error: 'Invalid insights endpoint',
+            path: path
+          }, 404);
         }
         
         // Credits management

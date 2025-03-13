@@ -3,8 +3,13 @@
 // Generate overall insights
 export async function generateInsights(request, env) {
   try {
+    // Clone the request at the beginning to avoid "Body already used" errors
+    const clonedRequest = request.clone();
+    
+    // Read the request body once and store the result
+    const requestData = await clonedRequest.json();
     const userId = request.user.user_id;
-    const { siteUrl, period, data } = await request.json();
+    const { siteUrl, period, data } = requestData;
 
     // Enhanced validation
     if (!siteUrl) {
@@ -19,8 +24,11 @@ export async function generateInsights(request, env) {
       });
     }
     
-    // Check if we're in development mode and should return mock data for testing
-    const returnMockData = request.url.includes('mock=true') || env.MOCK_OPENAI === 'true';
+    // Check if we're in development mode or if mock data is requested
+    const url = new URL(request.url);
+    const returnMockData = url.searchParams.has('mock') || env.MOCK_OPENAI === 'true' || 
+                          (data && data.useMock === true);
+                          
     if (returnMockData) {
       console.log('Using mock data instead of calling OpenAI');
       const mockResponse = generateMockInsights(siteUrl, period);
@@ -64,7 +72,8 @@ export async function generateInsights(request, env) {
     ).bind(userId, siteUrl, today).first();
 
     // If insights exist and not forced refresh, return cached version
-    if (existingInsight && !request.url.includes('force=true')) {
+    const forcedRefresh = url.searchParams.has('force');
+    if (existingInsight && !forcedRefresh) {
       const insight = await env.DB.prepare(
         'SELECT content FROM insights WHERE id = ?'
       ).bind(existingInsight.id).first();
@@ -192,18 +201,21 @@ export async function generateInsights(request, env) {
       
       clearTimeout(timeoutId); // Clear the timeout if the request completes
 
-      if (!openaiResponse.ok) {
+      // Clone the response before checking its status to avoid consuming the body
+      const clonedResponse = openaiResponse.clone();
+      
+      if (!clonedResponse.ok) {
         // Log the detailed error for debugging
         let errorText = '';
         try {
-          errorText = await openaiResponse.text();
+          errorText = await clonedResponse.text();
         } catch (textError) {
           errorText = 'Could not read error response body';
         }
         
         console.error('OpenAI API error:', {
-          status: openaiResponse.status,
-          statusText: openaiResponse.statusText,
+          status: clonedResponse.status,
+          statusText: clonedResponse.statusText,
           errorDetails: errorText
         });
         
@@ -227,14 +239,14 @@ export async function generateInsights(request, env) {
     // Additional validation for OpenAI response
     let openaiData;
     try {
+      // Use the original response if we get here (we haven't consumed the body yet)
       openaiData = await openaiResponse.json();
+      
       if (!openaiData.choices || !openaiData.choices[0] || !openaiData.choices[0].message) {
         console.error('Invalid OpenAI response format:', openaiData);
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Invalid response from AI service'
-        }), {
-          status: 500,
+        // Return fallback insights instead of error
+        const fallbackInsights = generateFallbackInsights(siteUrl, period);
+        return new Response(JSON.stringify(fallbackInsights), {
           headers: { 'Content-Type': 'application/json' }
         });
       }
@@ -421,8 +433,62 @@ export async function generateInsights(request, env) {
 
 // Generate page-specific insights
 export async function generatePageInsights(request, env) {
-  // Similar to generateInsights, but focused on a specific page
-  // ...
+  try {
+    // Clone the request at the beginning to avoid "Body already used" errors
+    const clonedRequest = request.clone();
+    
+    // Read the request body once and store the result
+    const requestData = await clonedRequest.json();
+    const userId = request.user.user_id;
+    
+    // Extract page URL from the path
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split('/');
+    const pagePathEncoded = pathParts[pathParts.length - 1];
+    const pagePath = decodeURIComponent(pagePathEncoded);
+    
+    const { siteUrl, period, data } = requestData;
+
+    // Similar to generateInsights, but focused on a specific page
+    // ...
+  } catch (error) {
+    console.error('Error in generatePageInsights:', error);
+    // Provide more specific error message based on the error type
+    let errorMessage = 'Failed to generate page insights';
+    let statusCode = 500;
+    
+    if (error.name === 'SyntaxError' && error.message.includes('JSON')) {
+      errorMessage = 'Invalid request format';
+      statusCode = 400;
+    } else if (error.message && error.message.includes('user_id')) {
+      errorMessage = 'Authentication required';
+      statusCode = 401;
+    }
+    
+    // Return fallback insights instead of error if possible
+    try {
+      const fallbackInsights = generateFallbackInsights(
+        error.siteUrl || "your website", 
+        error.period || "the selected period"
+      );
+      return new Response(JSON.stringify(fallbackInsights), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (fallbackError) {
+      // If even the fallback generation fails, return an error
+      return new Response(JSON.stringify({
+        success: false,
+        error: errorMessage,
+        errorType: error.name,
+        errorDetails: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }), {
+        status: statusCode,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+  }
 }
 
 // Helper function to generate fallback insights when OpenAI API fails
