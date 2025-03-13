@@ -29,10 +29,12 @@ export async function generateInsights(request, env) {
     const returnMockData = url.searchParams.has('mock') || env.MOCK_OPENAI === 'true' || 
                           (data && data.useMock === true);
                           
+    let generatedInsights = null; // Initialize the variable
+
     if (returnMockData) {
       console.log('Using mock data instead of calling OpenAI');
-      const mockResponse = generateMockInsights(siteUrl, period);
-      return new Response(JSON.stringify(mockResponse), {
+      generatedInsights = generateMockInsights(siteUrl, period);
+      return new Response(JSON.stringify(generatedInsights), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -262,117 +264,75 @@ export async function generateInsights(request, env) {
     // Additional validation for OpenAI response
     let openaiData;
     try {
-      // Use the original response if we get here (we haven't consumed the body yet)
       openaiData = await openaiResponse.json();
       
       if (!openaiData.choices || !openaiData.choices[0] || !openaiData.choices[0].message) {
         console.error('Invalid OpenAI response format:', openaiData);
-        // Return fallback insights instead of error
-        const fallbackInsights = generateFallbackInsights(siteUrl, period);
-        return new Response(JSON.stringify(fallbackInsights), {
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-            'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Allow-Credentials': 'true',
-            'Access-Control-Max-Age': '86400'
-          }
-        });
+        throw new Error('Invalid OpenAI response format');
       }
       
-      // Parse JSON response from OpenAI or use as-is if already JSON
-      let generatedInsights;
+      const content = openaiData.choices[0].message.content;
+      console.log('Raw OpenAI response content:', content.substring(0, 100) + '...');
+      
+      // Parse the content as JSON
+      if (typeof content === 'string' && content.trim().startsWith('{')) {
+        generatedInsights = JSON.parse(content);
+        
+        // Validate required fields
+        if (!generatedInsights.summary || 
+            !generatedInsights.performance || 
+            !generatedInsights.topFindings || 
+            !generatedInsights.recommendations) {
+          throw new Error('Missing required fields in OpenAI response');
+        }
+      } else {
+        throw new Error('OpenAI response is not in JSON format');
+      }
+
+      // Use database transaction to ensure atomic operations
       try {
-        const content = openaiData.choices[0].message.content;
-        console.log('Raw OpenAI response content:', content.substring(0, 100) + '...');
+        await env.DB.batch([
+          // Store insights in database
+          env.DB.prepare(
+            `INSERT OR REPLACE INTO insights (user_id, site_url, date, type, content, created_at)
+            VALUES (?, ?, ?, 'overall', ?, ?)`
+          ).bind(
+            userId,
+            siteUrl,
+            today,
+            JSON.stringify(generatedInsights),
+            new Date().toISOString()
+          ),
+          
+          // Deduct credit
+          env.DB.prepare(
+            'UPDATE users SET credits = credits - 1 WHERE id = ?'
+          ).bind(userId)
+        ]);
         
-        // Check if the content is already in JSON format
-        if (typeof content === 'string' && content.trim().startsWith('{')) {
-          try {
-            generatedInsights = JSON.parse(content);
-            
-            // Validate the structure of the generated insights
-            if (!generatedInsights.summary || 
-                !generatedInsights.performance || 
-                !generatedInsights.topFindings || 
-                !generatedInsights.recommendations) {
-              
-              console.warn('Generated insights missing required fields, adding defaults');
-              
-              // Add missing fields with defaults
-              generatedInsights = {
-                summary: generatedInsights.summary || "Analysis of your site's performance",
-                performance: generatedInsights.performance || { 
-                  trend: "stable", 
-                  details: "Not enough data for detailed trend analysis." 
-                },
-                topFindings: generatedInsights.topFindings || [
-                  {
-                    title: "Basic SEO analysis",
-                    description: "Your site is indexed by Google. Regular monitoring is recommended."
-                  }
-                ],
-                recommendations: generatedInsights.recommendations || [
-                  {
-                    title: "General recommendation",
-                    description: "Monitor trends in Google Search Console regularly.",
-                    priority: "medium"
-                  }
-                ]
-              };
-            }
-          } catch (parseError) {
-            console.error('JSON parse error:', parseError);
-            throw new Error('Invalid JSON in OpenAI response');
-          }
-        } else {
-          // If not JSON, create a simple structured response
-          generatedInsights = {
-            summary: "Analysis of your site's performance",
-            performance: { 
-              trend: "stable", 
-              details: "Not enough data for detailed trend analysis." 
-            },
-            topFindings: [
-              {
-                title: "Basic SEO analysis",
-                description: content.substring(0, 200) // Include part of the raw response
-              }
-            ],
-            recommendations: [
-              {
-                title: "General recommendation",
-                description: "Check Google Search Console for more detailed data.",
-                priority: "medium"
-              }
-            ]
-          };
-        }
-      } catch (error) {
-        console.error('Failed to parse OpenAI response as JSON:', error);
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Failed to parse AI response'
-        }), {
-          status: 500,
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-            'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Allow-Credentials': 'true',
-            'Access-Control-Max-Age': '86400'
-          }
-        });
+        console.log('Insights generated and stored successfully for user:', userId);
+      } catch (dbError) {
+        console.error('Database error during insights generation:', dbError);
+        throw dbError;
       }
-    } catch (jsonError) {
-      console.error('Failed to parse OpenAI HTTP response:', jsonError);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Failed to read AI service response'
-      }), {
-        status: 500,
+
+      // Return the successful insights response
+      return new Response(JSON.stringify(generatedInsights), {
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true',
+          'Access-Control-Max-Age': '86400'
+        }
+      });
+
+    } catch (error) {
+      console.error('Error processing OpenAI response:', error);
+      // Use fallback insights when OpenAI parsing fails
+      const fallbackInsights = generateFallbackInsights(siteUrl, period);
+      return new Response(JSON.stringify(fallbackInsights), {
         headers: { 
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
@@ -383,61 +343,6 @@ export async function generateInsights(request, env) {
         }
       });
     }
-
-    // Use database transaction to ensure atomic operations
-    try {
-      await env.DB.batch([
-        // Store insights in database
-        env.DB.prepare(
-          `INSERT OR REPLACE INTO insights (user_id, site_url, date, type, content, created_at)
-          VALUES (?, ?, ?, 'overall', ?, ?)`
-        ).bind(
-          userId,
-          siteUrl,
-          today,
-          typeof generatedInsights === 'string' ? generatedInsights : JSON.stringify(generatedInsights),
-          new Date().toISOString()
-        ),
-        
-        // Deduct credit
-        env.DB.prepare(
-          'UPDATE users SET credits = credits - 1 WHERE id = ?'
-        ).bind(userId)
-      ]);
-      
-      console.log('Insights generated and stored successfully for user:', userId);
-    } catch (dbError) {
-      console.error('Database error during insights generation:', dbError);
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Failed to store insights'
-      }), {
-        status: 500,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Allow-Credentials': 'true',
-          'Access-Control-Max-Age': '86400'
-        }
-      });
-    }
-
-    // Return the insights as a proper JSON response
-    return new Response(
-      typeof generatedInsights === 'string' ? generatedInsights : JSON.stringify(generatedInsights), 
-      {
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Allow-Credentials': 'true',
-          'Access-Control-Max-Age': '86400'
-        }
-      }
-    );
   } catch (error) {
     console.error('Error in generateInsights:', error);
     // Provide more specific error message based on the error type
