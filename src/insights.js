@@ -26,15 +26,24 @@ export async function generateInsights(request, env) {
         hasApiUrl: !!env.OPENAI_API_URL
       });
       
-      return new Response(JSON.stringify({
-        success: false,
-        error: 'Server configuration error'
-      }), {
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      // Use default OpenAI API URL if not specified
+      if (!env.OPENAI_API_URL) {
+        env.OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+        console.log('Using default OpenAI API URL:', env.OPENAI_API_URL);
+      }
+      
+      // If still missing API key, return error
+      if (!env.OPENAI_API_KEY) {
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'OpenAI API key not configured'
+        }), {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+      }
     }
 
     // Check if user has already generated insights today
@@ -117,6 +126,13 @@ export async function generateInsights(request, env) {
     let openaiResponse;
     
     try {
+      // Log the actual request being sent
+      console.log('OpenAI API request:', {
+        url: env.OPENAI_API_URL,
+        model: "gpt-3.5-turbo",
+        promptFirstChars: prompt.substring(0, 50)
+      });
+      
       openaiResponse = await fetch(env.OPENAI_API_URL, {
         method: 'POST',
         headers: {
@@ -126,11 +142,12 @@ export async function generateInsights(request, env) {
         body: JSON.stringify({
           model: "gpt-3.5-turbo", // Using a more widely available model
           messages: [
-            { role: "system", content: "You are an SEO and website analytics expert. Provide concise, actionable insights." },
+            { role: "system", content: "You are an SEO and website analytics expert. Provide concise, actionable insights. Your response must be valid JSON." },
             { role: "user", content: prompt }
           ],
           temperature: 0.7,
-          max_tokens: 800
+          max_tokens: 800,
+          response_format: { type: "json_object" } // Ensure JSON response
         }),
         signal: controller.signal
       });
@@ -187,7 +204,43 @@ export async function generateInsights(request, env) {
         
         // Check if the content is already in JSON format
         if (typeof content === 'string' && content.trim().startsWith('{')) {
-          generatedInsights = JSON.parse(content);
+          try {
+            generatedInsights = JSON.parse(content);
+            
+            // Validate the structure of the generated insights
+            if (!generatedInsights.summary || 
+                !generatedInsights.performance || 
+                !generatedInsights.topFindings || 
+                !generatedInsights.recommendations) {
+              
+              console.warn('Generated insights missing required fields, adding defaults');
+              
+              // Add missing fields with defaults
+              generatedInsights = {
+                summary: generatedInsights.summary || "Analysis of your site's performance",
+                performance: generatedInsights.performance || { 
+                  trend: "stable", 
+                  details: "Not enough data for detailed trend analysis." 
+                },
+                topFindings: generatedInsights.topFindings || [
+                  {
+                    title: "Basic SEO analysis",
+                    description: "Your site is indexed by Google. Regular monitoring is recommended."
+                  }
+                ],
+                recommendations: generatedInsights.recommendations || [
+                  {
+                    title: "General recommendation",
+                    description: "Monitor trends in Google Search Console regularly.",
+                    priority: "medium"
+                  }
+                ]
+              };
+            }
+          } catch (parseError) {
+            console.error('JSON parse error:', parseError);
+            throw new Error('Invalid JSON in OpenAI response');
+          }
         } else {
           // If not JSON, create a simple structured response
           generatedInsights = {
