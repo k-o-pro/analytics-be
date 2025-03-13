@@ -122,7 +122,7 @@ export async function generateInsights(request, env) {
 
     // Call OpenAI API with timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 60000); // Increased to 60 second timeout for larger requests
     let openaiResponse;
     
     try {
@@ -130,34 +130,71 @@ export async function generateInsights(request, env) {
       console.log('OpenAI API request:', {
         url: env.OPENAI_API_URL,
         model: "gpt-3.5-turbo",
-        promptFirstChars: prompt.substring(0, 50)
+        promptFirstChars: prompt.substring(0, 50),
+        hasValidApiKey: !!env.OPENAI_API_KEY
       });
       
-      openaiResponse = await fetch(env.OPENAI_API_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: "gpt-3.5-turbo", // Using a more widely available model
-          messages: [
-            { role: "system", content: "You are an SEO and website analytics expert. Provide concise, actionable insights. Your response must be valid JSON." },
-            { role: "user", content: prompt }
-          ],
-          temperature: 0.7,
-          max_tokens: 800,
-          response_format: { type: "json_object" } // Ensure JSON response
-        }),
-        signal: controller.signal
-      });
+      // Double-check API URL format
+      if (!env.OPENAI_API_URL.startsWith('http')) {
+        env.OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+        console.log('Fixed OpenAI API URL format:', env.OPENAI_API_URL);
+      }
+      
+      // Ensure valid API key format (starts with "sk-")
+      if (env.OPENAI_API_KEY && !env.OPENAI_API_KEY.startsWith('sk-')) {
+        console.error('Invalid OpenAI API key format - should start with "sk-"');
+        return new Response(JSON.stringify({
+          success: false,
+          error: 'Invalid API key configuration'
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      // Make the API request with proper error handling
+      try {
+        openaiResponse = await fetch(env.OPENAI_API_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: "gpt-3.5-turbo", // Using a more widely available model
+            messages: [
+              { role: "system", content: "You are an SEO and website analytics expert. Provide concise, actionable insights. Your response must be valid JSON." },
+              { role: "user", content: prompt }
+            ],
+            temperature: 0.7,
+            max_tokens: 800,
+            response_format: { type: "json_object" } // Ensure JSON response
+          }),
+          signal: controller.signal
+        });
+      } catch (fetchInnerError) {
+        // Detailed error logging for network issues
+        console.error('Network error during OpenAI fetch:', fetchInnerError.name, fetchInnerError.message);
+        throw fetchInnerError; // Re-throw to be caught by outer catch
+      }
       
       clearTimeout(timeoutId); // Clear the timeout if the request completes
 
       if (!openaiResponse.ok) {
         // Log the detailed error for debugging
-        const errorText = await openaiResponse.text();
-        console.error('OpenAI API error:', openaiResponse.status, errorText);
+        let errorText = '';
+        try {
+          errorText = await openaiResponse.text();
+        } catch (textError) {
+          errorText = 'Could not read error response body';
+        }
+        
+        console.error('OpenAI API error:', {
+          status: openaiResponse.status,
+          statusText: openaiResponse.statusText,
+          errorDetails: errorText
+        });
+        
         return new Response(JSON.stringify({
           success: false,
           error: `OpenAI API error: ${openaiResponse.status}`,
@@ -169,7 +206,7 @@ export async function generateInsights(request, env) {
       }
     } catch (fetchError) {
       clearTimeout(timeoutId);
-      console.error('OpenAI fetch error:', fetchError);
+      console.error('OpenAI fetch error:', fetchError.name, fetchError.message);
       return new Response(JSON.stringify({
         success: false,
         error: fetchError.name === 'AbortError' 
