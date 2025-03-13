@@ -134,7 +134,7 @@ export async function generateInsights(request, env) {
     // Enhanced debugging for request
     console.log('Calling OpenAI with request data:', {
       url: env.OPENAI_API_URL,
-      model: "gpt-3.5-turbo-16k", // Using a model with more capacity
+      model: "gpt-3.5-turbo", // Using the standard model which is more reliable
       apiKeyLength: env.OPENAI_API_KEY ? env.OPENAI_API_KEY.length : 0,
       promptLength: prompt.length
     });
@@ -148,7 +148,7 @@ export async function generateInsights(request, env) {
       // Log the actual request being sent
       console.log('OpenAI API request:', {
         url: env.OPENAI_API_URL,
-        model: "gpt-3.5-turbo-16k",
+        model: "gpt-3.5-turbo",
         promptFirstChars: prompt.substring(0, 50),
         hasValidApiKey: !!env.OPENAI_API_KEY
       });
@@ -166,7 +166,14 @@ export async function generateInsights(request, env) {
         // Return fallback insights instead of error
         const fallbackInsights = generateFallbackInsights(siteUrl, period);
         return new Response(JSON.stringify(fallbackInsights), {
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+            'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true',
+            'Access-Control-Max-Age': '86400'
+          }
         });
       }
       
@@ -179,14 +186,16 @@ export async function generateInsights(request, env) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            model: "gpt-3.5-turbo-16k", // Using a model with more capacity
+            model: "gpt-3.5-turbo", // Using the standard model which is more reliable
             messages: [
-              { role: "system", content: "You are an SEO and website analytics expert. Provide concise, actionable insights. Your response must be valid JSON." },
+              { 
+                role: "system", 
+                content: "You are an SEO and website analytics expert. Provide concise, actionable insights. Format your entire response as a valid JSON object with the following structure: {\"summary\": \"Brief executive summary\", \"performance\": {\"trend\": \"up/down/stable\", \"details\": \"...\"}, \"topFindings\": [{\"title\": \"...\", \"description\": \"...\"}], \"recommendations\": [{\"title\": \"...\", \"description\": \"...\", \"priority\": \"high/medium/low\"}]}" 
+              },
               { role: "user", content: prompt }
             ],
             temperature: 0.7,
-            max_tokens: 800,
-            response_format: { type: "json_object" } // Ensure JSON response
+            max_tokens: 800
           }),
           signal: controller.signal
         });
@@ -222,7 +231,14 @@ export async function generateInsights(request, env) {
         // Return fallback insights instead of error
         const fallbackInsights = generateFallbackInsights(siteUrl, period);
         return new Response(JSON.stringify(fallbackInsights), {
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+            'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true',
+            'Access-Control-Max-Age': '86400'
+          }
         });
       }
     } catch (fetchError) {
@@ -232,7 +248,14 @@ export async function generateInsights(request, env) {
       // Return fallback insights instead of error
       const fallbackInsights = generateFallbackInsights(siteUrl, period);
       return new Response(JSON.stringify(fallbackInsights), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true',
+          'Access-Control-Max-Age': '86400'
+        }
       });
     }
 
@@ -247,7 +270,14 @@ export async function generateInsights(request, env) {
         // Return fallback insights instead of error
         const fallbackInsights = generateFallbackInsights(siteUrl, period);
         return new Response(JSON.stringify(fallbackInsights), {
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+            'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true',
+            'Access-Control-Max-Age': '86400'
+          }
         });
       }
       
@@ -326,7 +356,14 @@ export async function generateInsights(request, env) {
           error: 'Failed to parse AI response'
         }), {
           status: 500,
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+            'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Allow-Credentials': 'true',
+            'Access-Control-Max-Age': '86400'
+          }
         });
       }
     } catch (jsonError) {
@@ -336,7 +373,14 @@ export async function generateInsights(request, env) {
         error: 'Failed to read AI service response'
       }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true',
+          'Access-Control-Max-Age': '86400'
+        }
       });
     }
 
@@ -380,7 +424,14 @@ export async function generateInsights(request, env) {
         error: 'Failed to store insights'
       }), {
         status: 500,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true',
+          'Access-Control-Max-Age': '86400'
+        }
       });
     }
 
@@ -388,7 +439,14 @@ export async function generateInsights(request, env) {
     return new Response(
       typeof generatedInsights === 'string' ? generatedInsights : JSON.stringify(generatedInsights), 
       {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true',
+          'Access-Control-Max-Age': '86400'
+        }
       }
     );
   } catch (error) {
@@ -412,7 +470,14 @@ export async function generateInsights(request, env) {
         error.period || "the selected period"
       );
       return new Response(JSON.stringify(fallbackInsights), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true',
+          'Access-Control-Max-Age': '86400'
+        }
       });
     } catch (fallbackError) {
       // If even the fallback generation fails, return an error
@@ -423,8 +488,13 @@ export async function generateInsights(request, env) {
         errorDetails: process.env.NODE_ENV === 'development' ? error.message : undefined
       }), {
         status: statusCode,
-        headers: {
-          'Content-Type': 'application/json'
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true',
+          'Access-Control-Max-Age': '86400'
         }
       });
     }
@@ -472,7 +542,14 @@ export async function generatePageInsights(request, env) {
         error.period || "the selected period"
       );
       return new Response(JSON.stringify(fallbackInsights), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true',
+          'Access-Control-Max-Age': '86400'
+        }
       });
     } catch (fallbackError) {
       // If even the fallback generation fails, return an error
@@ -483,8 +560,13 @@ export async function generatePageInsights(request, env) {
         errorDetails: process.env.NODE_ENV === 'development' ? error.message : undefined
       }), {
         status: statusCode,
-        headers: {
-          'Content-Type': 'application/json'
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Credentials': 'true',
+          'Access-Control-Max-Age': '86400'
         }
       });
     }
