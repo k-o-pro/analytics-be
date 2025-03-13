@@ -386,38 +386,27 @@ export async function generateInsights(request, env) {
 
     // Use database transaction to ensure atomic operations
     try {
-      // Begin transaction
-      await env.DB.exec('BEGIN TRANSACTION');
-      
-      // Store insights in database
-      await env.DB.prepare(
-        `INSERT OR REPLACE INTO insights (user_id, site_url, date, type, content, created_at)
-         VALUES (?, ?, ?, 'overall', ?, ?)`
-      ).bind(
-        userId,
-        siteUrl,
-        today,
-        typeof generatedInsights === 'string' ? generatedInsights : JSON.stringify(generatedInsights),
-        new Date().toISOString()
-      ).run();
-
-      // Deduct credit
-      await env.DB.prepare(
-        'UPDATE users SET credits = credits - 1 WHERE id = ?'
-      ).bind(userId).run();
-      
-      // Commit transaction
-      await env.DB.exec('COMMIT');
+      await env.DB.batch([
+        // Store insights in database
+        env.DB.prepare(
+          `INSERT OR REPLACE INTO insights (user_id, site_url, date, type, content, created_at)
+          VALUES (?, ?, ?, 'overall', ?, ?)`
+        ).bind(
+          userId,
+          siteUrl,
+          today,
+          typeof generatedInsights === 'string' ? generatedInsights : JSON.stringify(generatedInsights),
+          new Date().toISOString()
+        ),
+        
+        // Deduct credit
+        env.DB.prepare(
+          'UPDATE users SET credits = credits - 1 WHERE id = ?'
+        ).bind(userId)
+      ]);
       
       console.log('Insights generated and stored successfully for user:', userId);
     } catch (dbError) {
-      // Rollback on error
-      try {
-        await env.DB.exec('ROLLBACK');
-      } catch (rollbackError) {
-        console.error('Failed to rollback transaction:', rollbackError);
-      }
-      
       console.error('Database error during insights generation:', dbError);
       return new Response(JSON.stringify({
         success: false,
