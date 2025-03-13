@@ -19,6 +19,16 @@ export async function generateInsights(request, env) {
       });
     }
     
+    // Check if we're in development mode and should return mock data for testing
+    const returnMockData = request.url.includes('mock=true') || env.MOCK_OPENAI === 'true';
+    if (returnMockData) {
+      console.log('Using mock data instead of calling OpenAI');
+      const mockResponse = generateMockInsights(siteUrl, period);
+      return new Response(JSON.stringify(mockResponse), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
     // Validate required OpenAI environment variables
     if (!env.OPENAI_API_KEY || !env.OPENAI_API_URL) {
       console.error('Missing OpenAI configuration:', {
@@ -115,7 +125,7 @@ export async function generateInsights(request, env) {
     // Enhanced debugging for request
     console.log('Calling OpenAI with request data:', {
       url: env.OPENAI_API_URL,
-      model: "gpt-3.5-turbo", // Using a more widely available model
+      model: "gpt-3.5-turbo-16k", // Using a model with more capacity
       apiKeyLength: env.OPENAI_API_KEY ? env.OPENAI_API_KEY.length : 0,
       promptLength: prompt.length
     });
@@ -129,7 +139,7 @@ export async function generateInsights(request, env) {
       // Log the actual request being sent
       console.log('OpenAI API request:', {
         url: env.OPENAI_API_URL,
-        model: "gpt-3.5-turbo",
+        model: "gpt-3.5-turbo-16k",
         promptFirstChars: prompt.substring(0, 50),
         hasValidApiKey: !!env.OPENAI_API_KEY
       });
@@ -143,11 +153,10 @@ export async function generateInsights(request, env) {
       // Ensure valid API key format (starts with "sk-")
       if (env.OPENAI_API_KEY && !env.OPENAI_API_KEY.startsWith('sk-')) {
         console.error('Invalid OpenAI API key format - should start with "sk-"');
-        return new Response(JSON.stringify({
-          success: false,
-          error: 'Invalid API key configuration'
-        }), {
-          status: 500,
+        
+        // Return fallback insights instead of error
+        const fallbackInsights = generateFallbackInsights(siteUrl, period);
+        return new Response(JSON.stringify(fallbackInsights), {
           headers: { 'Content-Type': 'application/json' }
         });
       }
@@ -161,7 +170,7 @@ export async function generateInsights(request, env) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            model: "gpt-3.5-turbo", // Using a more widely available model
+            model: "gpt-3.5-turbo-16k", // Using a model with more capacity
             messages: [
               { role: "system", content: "You are an SEO and website analytics expert. Provide concise, actionable insights. Your response must be valid JSON." },
               { role: "user", content: prompt }
@@ -177,6 +186,9 @@ export async function generateInsights(request, env) {
         console.error('Network error during OpenAI fetch:', fetchInnerError.name, fetchInnerError.message);
         throw fetchInnerError; // Re-throw to be caught by outer catch
       }
+      
+      // Log the response status
+      console.log('OpenAI API response status:', openaiResponse.status, openaiResponse.statusText);
       
       clearTimeout(timeoutId); // Clear the timeout if the request completes
 
@@ -195,25 +207,19 @@ export async function generateInsights(request, env) {
           errorDetails: errorText
         });
         
-        return new Response(JSON.stringify({
-          success: false,
-          error: `OpenAI API error: ${openaiResponse.status}`,
-          details: errorText
-        }), {
-          status: 500,
+        // Return fallback insights instead of error
+        const fallbackInsights = generateFallbackInsights(siteUrl, period);
+        return new Response(JSON.stringify(fallbackInsights), {
           headers: { 'Content-Type': 'application/json' }
         });
       }
     } catch (fetchError) {
       clearTimeout(timeoutId);
       console.error('OpenAI fetch error:', fetchError.name, fetchError.message);
-      return new Response(JSON.stringify({
-        success: false,
-        error: fetchError.name === 'AbortError' 
-          ? 'OpenAI request timed out' 
-          : 'Failed to connect to OpenAI service'
-      }), {
-        status: 500,
+      
+      // Return fallback insights instead of error
+      const fallbackInsights = generateFallbackInsights(siteUrl, period);
+      return new Response(JSON.stringify(fallbackInsights), {
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -387,17 +393,29 @@ export async function generateInsights(request, env) {
       statusCode = 401;
     }
     
-    return new Response(JSON.stringify({
-      success: false,
-      error: errorMessage,
-      errorType: error.name,
-      errorDetails: process.env.NODE_ENV === 'development' ? error.message : undefined
-    }), {
-      status: statusCode,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    // Return fallback insights instead of error if possible
+    try {
+      const fallbackInsights = generateFallbackInsights(
+        error.siteUrl || "your website", 
+        error.period || "the selected period"
+      );
+      return new Response(JSON.stringify(fallbackInsights), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (fallbackError) {
+      // If even the fallback generation fails, return an error
+      return new Response(JSON.stringify({
+        success: false,
+        error: errorMessage,
+        errorType: error.name,
+        errorDetails: process.env.NODE_ENV === 'development' ? error.message : undefined
+      }), {
+        status: statusCode,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    }
   }
 }
 
@@ -405,4 +423,84 @@ export async function generateInsights(request, env) {
 export async function generatePageInsights(request, env) {
   // Similar to generateInsights, but focused on a specific page
   // ...
+}
+
+// Helper function to generate fallback insights when OpenAI API fails
+function generateFallbackInsights(siteUrl, period) {
+  return {
+    summary: `Analysis of site performance for ${siteUrl} during ${period}. This is a fallback analysis since the AI service is currently unavailable.`,
+    performance: {
+      trend: "stable",
+      details: "Performance trend analysis is currently unavailable. Please check your Google Search Console for the most up-to-date metrics."
+    },
+    topFindings: [
+      {
+        title: "AI Analysis Unavailable",
+        description: "Our AI analysis service is temporarily unavailable. We're working to restore it as soon as possible."
+      },
+      {
+        title: "Basic SEO Recommendations",
+        description: "In the meantime, we recommend checking your site for basic SEO best practices: meta descriptions, title tags, mobile-friendliness, and site speed."
+      }
+    ],
+    recommendations: [
+      {
+        title: "Check Google Search Console",
+        description: "Review your performance metrics directly in Google Search Console for the most accurate data.",
+        priority: "high"
+      },
+      {
+        title: "Try Again Later",
+        description: "Our AI analysis service should be available again soon. Please try again in a few hours.",
+        priority: "medium"
+      },
+      {
+        title: "Monitor Keywords",
+        description: "Keep track of your top-performing keywords and look for opportunities to improve rankings.",
+        priority: "medium"
+      }
+    ]
+  };
+}
+
+// Helper function to generate mock insights for testing
+function generateMockInsights(siteUrl, period) {
+  return {
+    summary: `Analysis of ${siteUrl} shows relatively stable performance over ${period}. There are opportunities to improve CTR on some high-impression pages.`,
+    performance: {
+      trend: "up",
+      details: "Overall impressions increased by 15% while clicks increased by 22%, indicating improving engagement."
+    },
+    topFindings: [
+      {
+        title: "Increased Mobile Traffic",
+        description: "Mobile traffic has increased by 27% compared to the previous period, suggesting your site is performing well on mobile devices."
+      },
+      {
+        title: "Strong Performance for Key Terms",
+        description: "Your site ranks in top 5 positions for several important keywords, with good CTR for most."
+      },
+      {
+        title: "Product Pages Underperforming",
+        description: "Several product pages have high impressions but low CTR, indicating potential issues with meta descriptions or title tags."
+      }
+    ],
+    recommendations: [
+      {
+        title: "Optimize Product Page Metadata",
+        description: "Revise title tags and meta descriptions for product pages to improve CTR from search results.",
+        priority: "high"
+      },
+      {
+        title: "Create Content for Rising Keywords",
+        description: "Develop new content targeting keywords that are showing increasing search volume in your niche.",
+        priority: "medium"
+      },
+      {
+        title: "Improve Page Load Speed",
+        description: "Several key landing pages could benefit from performance optimization to improve Core Web Vitals metrics.",
+        priority: "medium"
+      }
+    ]
+  };
 }
