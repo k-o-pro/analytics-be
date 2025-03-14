@@ -3,7 +3,7 @@
 /**
  * Base API Error class
  */
-class APIError extends Error {
+export class APIError extends Error {
     constructor(message, status = 500, code = 'INTERNAL_ERROR', details = null) {
         super(message);
         this.name = 'APIError';
@@ -146,4 +146,4 @@ export function createCorsHeaders(frontendUrl) {
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Credentials': 'true'
     };
-} 
+}
