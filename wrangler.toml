@@ -15,6 +15,10 @@ GOOGLE_CLIENT_ID = "724601444957-h1sofo90i307cjln4ds6jbdo601t314m.apps.googleuse
 binding = "AUTH_STORE"
 id = "64f21dad93ce4636bdc4daacd1f275bd"
 
+[[kv_namespaces]]
+binding = "GSC_CACHE"
+id = "d3fa1c681a334d9d83d4536939ae9e85"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "analytics-be"

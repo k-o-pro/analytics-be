@@ -1,44 +1,108 @@
-# Search Console Analytics
+# Search Console Analytics Backend
 
-A powerful web application that transforms complex Google Search Console data into actionable insights with AI-powered analysis and visualizations.
+A robust serverless API built on Cloudflare Workers that powers the Search Console Analytics platform, providing secure access to Google Search Console data and AI-powered insights.
 
 ## Overview
 
-Search Console Analytics provides a comprehensive dashboard for analyzing your website's search performance using data from Google Search Console. The application delivers intuitive visualizations, top page analysis, and AI-generated insights to help you understand and improve your site's visibility in search results.
+The Search Console Analytics backend serves as the API layer for the analytics platform, handling authentication, data retrieval, caching, rate limiting, and AI processing. It's designed to be scalable, secure, and highly performant using Cloudflare's edge infrastructure.
 
-## Features
+## Key Features
 
-- **Interactive Dashboard**: View key metrics (clicks, impressions, CTR, position) with performance trends
-- **Top Pages Analysis**: Identify your best-performing pages and opportunities for improvement
-- **AI-Powered Insights**: Generate actionable recommendations based on your search performance data
-- **Multiple Properties**: Connect and manage multiple GSC properties
-- **Historical Data**: Track performance over time with comparative analysis
-- **Credit System**: Premium features accessible via a credit-based system
+- **Serverless Architecture**: Built on Cloudflare Workers for global distribution and high availability
+- **OAuth Integration**: Secure authentication with Google Search Console API
+- **Advanced Caching**: Edge caching for improved performance and reduced API costs
+- **Rate Limiting**: Intelligent rate limiting to prevent API abuse
+- **Robust Error Handling**: Comprehensive error handling with detailed error responses
+- **AI Insights Generation**: Processing of GSC data to generate actionable insights
+- **Database Integration**: Cloudflare D1 (SQLite) for persistent data storage
 
-## Architecture
+## Technology Stack
 
-The application uses a decoupled architecture:
+- **Runtime**: Cloudflare Workers (JavaScript)
+- **Router**: itty-router for request routing
+- **Database**: Cloudflare D1 (SQLite-compatible)
+- **Storage**: Cloudflare KV for token and cache storage
+- **Authentication**: JWT for API authentication
+- **Validation**: Zod for request validation
+- **CORS**: itty-cors for cross-origin resource sharing
 
-- **Frontend**: React/TypeScript single-page application (SPA) hosted on GitHub Pages
-- **Backend**: Cloudflare Workers serverless API endpoints
-- **Database**: Cloudflare D1 (SQLite-compatible) for data storage and retrieval
-- **Authentication**: OAuth 2.0 for Google Search Console API + JWT for application users
+## Project Structure
+
+```
+/src
+  /services         - External service integrations
+  /utils
+    cache.js        - Caching utilities
+    errors.js       - Error handling system
+    rateLimiter.js  - Rate limiting implementation
+  auth.js           - Authentication endpoints and logic
+  credits.js        - User credits management
+  gsc.js            - Google Search Console API integration
+  index.js          - Main application entry point
+  insights.js       - AI insights generation
+  schema.sql        - Database schema
+```
+
+## Recent Improvements
+
+### Enhanced Error Handling
+- Implemented standardized error response structure
+- Created custom error classes for different error types
+- Added centralized error handling middleware
+- Improved error logging and client feedback
+
+### Robust Rate Limiting
+- Implemented token bucket algorithm for rate limiting
+- Added per-endpoint and per-user rate limits
+- Created clear rate limit exceeded responses
+- Stored rate limit state in Cloudflare KV
+
+### Performance Optimization
+- Implemented multi-level caching strategy
+- Added automatic cache invalidation for fresh data
+- Optimized database queries for faster response times
+- Implemented parallel processing for batch operations
+
+## API Endpoints
+
+### Authentication
+- `POST /auth/login` - User login with email/password
+- `POST /auth/register` - New user registration
+- `POST /auth/google` - Initiate Google OAuth flow
+- `POST /auth/callback` - Process OAuth callback
+- `POST /auth/refresh` - Refresh access token
+- `POST /auth/logout` - Invalidate current token
+
+### Google Search Console
+- `GET /gsc/properties` - List available GSC properties
+- `POST /gsc/data` - Retrieve GSC metrics data
+- `GET /gsc/top-pages` - Get top-performing pages
+- `GET /gsc/keywords` - Get top keywords
+
+### Insights
+- `POST /insights/generate` - Generate AI-powered site insights
+- `POST /insights/page/:url` - Generate page-specific insights
+- `GET /insights/history` - Retrieve previously generated insights
+
+### User Management
+- `GET /credits` - Get current user credit balance
+- `POST /credits/use` - Use credits for premium features
 
 ## Setup & Installation
 
 ### Prerequisites
 
-- Node.js (v14+) and npm
+- Node.js (v16+) and npm
 - Cloudflare account with Workers and D1 enabled
 - Google Cloud Platform account with Search Console API enabled
-- GitHub account for deploying the frontend
+- Wrangler CLI
 
 ### Local Development
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/search-console-analytics.git
-   cd search-console-analytics
+   git clone https://github.com/yourusername/analytics-be.git
+   cd analytics-be
    ```
 
 2. **Install dependencies**
@@ -48,295 +112,86 @@ The application uses a decoupled architecture:
 
 3. **Set up environment variables**
    
-   Create a `.env` file in the project root:
+   Create `.env.development` and `.env.production` files:
    ```
-   REACT_APP_API_URL=http://localhost:8787
-   REACT_APP_GOOGLE_CLIENT_ID=your_google_client_id
+   FRONTEND_URL=http://localhost:3000
+   JWT_SECRET=your_jwt_secret
    ```
 
-4. **Run frontend development server**
+4. **Run development server**
    ```bash
-   npm start
+   npm run dev
    ```
 
-5. **Run backend development server**
+## Deployment
+
+1. **Authenticate with Cloudflare**
    ```bash
-   npx wrangler dev
+   npx wrangler login
    ```
 
-### Cloudflare Workers Setup
-
-1. **Install Wrangler CLI globally**
-   ```bash
-   npm install -g wrangler
-   ```
-
-2. **Authenticate with Cloudflare**
-   ```bash
-   wrangler login
-   ```
-
-3. **Create D1 database**
-   ```bash
-   wrangler d1 create search-analytics-db
-   ```
-
-4. **Apply database migrations**
-   ```bash
-   wrangler d1 execute search-analytics-db --file=./src/schema.sql
-   ```
-
-5. **Create KV namespace for token storage**
-   ```bash
-   wrangler kv:namespace create AUTH_STORE
-   wrangler kv:namespace create AUTH_STORE --preview
-   ```
-
-6. **Update wrangler.toml with your IDs**
-   
-   Edit the `wrangler.toml` file and replace placeholder IDs with the ones generated from the commands above:
-   ```toml
-   # Add KV binding for token storage
-   [[kv_namespaces]]
-   binding = "AUTH_STORE"
-   id = "analytics-be"
-   preview_id = "64f21dad93ce4636bdc4daacd1f275bd"
-
-   # Add D1 database binding
-   [[d1_databases]]
-   binding = "DB"
-   database_name = "analytics-be"
-   database_id = "165cb9e2-49fb-40ee-b02d-58e2c5e072bb"
-   ```
-
-7. **Set up secrets**
-   ```bash
-   wrangler secret put OPENAI_API_KEY
-   wrangler secret put JWT_SECRET
-   wrangler secret put GOOGLE_CLIENT_ID
-   wrangler secret put GOOGLE_CLIENT_SECRET
-   ```
-
-8. **Deploy the worker**
-   ```bash
-   wrangler publish
-   ```
-
-### GitHub Pages Deployment
-
-1. **Update homepage in package.json**
-   
-   Edit `package.json` and set the homepage to your domain:
-   ```json
-   {
-     "homepage": "https://yourdomain.com"
-   }
-   ```
-
-2. **Build and deploy**
+2. **Deploy to Cloudflare**
    ```bash
    npm run deploy
    ```
 
-3. **Set up GitHub Pages**
-   
-   In your GitHub repository settings:
-   - Go to Pages section
-   - Select the `gh-pages` branch
-   - Set the custom domain if you have one
-   - Enable HTTPS
+## Error Handling System
 
-4. **Set up environment variables in GitHub Actions**
-   
-   Create a new GitHub Actions workflow file in `.github/workflows/deploy.yml`:
-   ```yaml
-   name: Deploy to GitHub Pages
+The backend implements a comprehensive error handling system with the following error types:
 
-   on:
-     push:
-       branches: [main]
+- **AuthError**: Authentication and authorization failures
+- **ValidationError**: Invalid request data
+- **RateLimitError**: Rate limit exceeded errors
+- **APIError**: External API errors (e.g., GSC API)
+- **DatabaseError**: Database operation failures
+- **NotFoundError**: Resource not found errors
 
-   jobs:
-     build-and-deploy:
-       runs-on: ubuntu-latest
-       steps:
-         - uses: actions/checkout@v2
-         - name: Install dependencies
-           run: npm ci
-         - name: Build
-           run: npm run build
-           env:
-             REACT_APP_API_URL: https://api.yourdomain.com
-             REACT_APP_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
-         - name: Deploy
-           uses: JamesIves/github-pages-deploy-action@4.1.5
-           with:
-             branch: gh-pages
-             folder: build
-   ```
+Each error type provides specific status codes, error messages, and optional additional details to help with debugging and user feedback.
 
-## API Endpoints
+## Rate Limiting
 
-The application exposes the following API endpoints:
+The rate limiting system uses a token bucket algorithm with the following features:
 
-### Authentication
-- `POST /auth/login` - User login
-- `POST /auth/register` - User registration
-- `POST /auth/callback` - OAuth callback
-- `POST /auth/refresh` - Refresh token
+- Global rate limits to protect the entire API
+- Endpoint-specific rate limits for sensitive operations
+- User-specific rate limits based on subscription tier
+- Automatic retry-after headers for client guidance
 
-### Google Search Console
-- `GET /gsc/properties` - Get available GSC properties
-- `POST /gsc/data` - Retrieve GSC metrics data
-- `GET /gsc/top-pages` - Get top pages performance
+## Caching Strategy
 
-### Insights
-- `POST /insights/generate` - Generate overall site insights
-- `POST /insights/page/:url` - Generate page-specific insights
+The backend employs a multi-level caching strategy:
 
-### User Management
-- `GET /credits` - Get user credits
-- `POST /credits/use` - Use credits for premium features
+1. **In-memory cache**: For frequently accessed, short-lived data
+2. **KV storage**: For persistent caching of API responses
+3. **Database cache**: For long-term storage of processed data
 
-## Data Structure
-
-### Cloudflare D1 Schema
-
-```sql
--- Users table
-CREATE TABLE users (
-  id INTEGER PRIMARY KEY,
-  email TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  name TEXT,
-  created_at TEXT NOT NULL,
-  last_login TEXT,
-  credits INTEGER DEFAULT 5,
-  gsc_refresh_token TEXT,
-  gsc_connected INTEGER DEFAULT 0
-);
-
--- GSC data storage
-CREATE TABLE gsc_data (
-  id INTEGER PRIMARY KEY,
-  user_id INTEGER NOT NULL,
-  site_url TEXT NOT NULL,
-  date_range TEXT NOT NULL,
-  dimensions TEXT NOT NULL,
-  data TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users (id)
-);
-
--- Insights table
-CREATE TABLE insights (
-  id INTEGER PRIMARY KEY,
-  user_id INTEGER NOT NULL,
-  site_url TEXT NOT NULL,
-  date TEXT NOT NULL,
-  type TEXT NOT NULL,
-  content TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users (id)
-);
-
--- Credit usage logs
-CREATE TABLE credit_logs (
-  id INTEGER PRIMARY KEY,
-  user_id INTEGER NOT NULL,
-  amount INTEGER NOT NULL,
-  purpose TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users (id)
-);
-
--- User properties (GSC sites)
-CREATE TABLE user_properties (
-  id INTEGER PRIMARY KEY,
-  user_id INTEGER NOT NULL,
-  site_url TEXT NOT NULL,
-  display_name TEXT,
-  added_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users (id)
-);
-```
-
-## Frontend Structure
-
-```
-/src
-  /components
-    /auth        - Authentication components
-    /dashboard   - Dashboard layout and components
-    /layout      - Layout components
-    /visualizations - Charts and data visualization
-  /contexts
-    AuthContext.tsx - Authentication context
-  /hooks         - Custom hooks
-  /pages         - Main application pages
-  /services      - API service modules
-  /types         - TypeScript type definitions
-  /utils         - Utility functions
-```
-
-## OAuth Configuration
-
-1. **Create OAuth Client ID in Google Cloud Console**
-   - Go to https://console.cloud.google.com
-   - Create a new project or use an existing one
-   - Enable the Google Search Console API
-   - Create OAuth 2.0 credentials
-   - Add authorized redirect URIs:
-     - `https://yourdomain.com/oauth-callback` (production)
-     - `http://localhost:3000/oauth-callback` (development)
-
-2. **Set Client ID and Secret**
-   - Add to frontend environment variables
-   - Add as secrets to Cloudflare Workers
+Cache invalidation occurs automatically based on time-to-live (TTL) values or through explicit invalidation during data updates.
 
 ## Security Considerations
 
-- CSRF tokens for form submissions
-- JWT tokens with short expiration
-- Encrypted storage of refresh tokens
-- CORS restrictions
-- Rate limiting for API endpoints
-- Input sanitization
-
-## Credits System
-
-The application includes a credit system for premium features:
-
-- Each user gets 10 credits on signup
-- Credits are consumed for:
-  - Analysis beyond top 10 pages (1 credit per page)
-  - AI insights generation (3 credits per advanced analysis)
-  - Historical data beyond 90 days (2 credits per additional month)
+- JWT tokens with short expiration for API authentication
+- Secure storage of refresh tokens in KV store
+- Input validation for all API endpoints using Zod
+- CORS restrictions to approved domains
+- Rate limiting to prevent abuse
+- Encrypted storage of sensitive data
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **API Connection Failures**
-   - Check if Cloudflare Worker is deployed
-   - Verify CORS configuration in `wrangler.toml`
-   - Check API URL in environment variables
+1. **Authentication Errors**
+   - Check JWT secret configuration
+   - Verify Google OAuth credentials
+   - Ensure tokens haven't expired
 
-2. **OAuth Issues**
-   - Verify redirect URIs are correctly set
-   - Check Google Cloud Console API access
-   - Ensure scopes are properly configured
+2. **Database Connection Issues**
+   - Verify D1 database bindings in wrangler.toml
+   - Check database migration status
 
-3. **Data Not Loading**
-   - Check browser console for errors
-   - Verify GSC connection is active
-   - Check if user has appropriate permissions
-
-### Developer Tools
-
-- React Developer Tools for component debugging
-- Network tab in browser DevTools for API requests
-- Wrangler logs for backend issues
+3. **Rate Limit Errors**
+   - Implement backoff strategy in clients
+   - Check rate limit configuration
 
 ## License
 
@@ -346,5 +201,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Google Search Console API documentation
 - Cloudflare Workers and D1 documentation
-- React and Material UI teams
-- OpenAI for the AI insights engine
+- The open-source community for the libraries used

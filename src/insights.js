@@ -546,3 +546,110 @@ function generateMockInsights(siteUrl, period) {
     ]
   };
 }
+
+import { analyzeGSCData } from './services/aiRecommendations.js';
+import { 
+    AuthError, 
+    ValidationError, 
+    RateLimitError,
+    createCorsHeaders,
+    withErrorHandling,
+    validateRequiredFields
+} from './utils/errors.js';
+import { checkRateLimit, generateGSCRateLimitKey } from './utils/rateLimiter.js';
+
+/**
+ * Get AI-powered insights and recommendations
+ */
+export const getInsights = withErrorHandling(async (request, env) => {
+    const userId = request.user.user_id;
+    const headers = createCorsHeaders(env.FRONTEND_URL);
+    
+    // Parse and validate request body
+    const body = await request.json();
+    validateRequiredFields(body, ['siteUrl', 'startDate', 'endDate']);
+    
+    const { siteUrl, startDate, endDate } = body;
+    
+    // Check rate limit before making API call
+    const rateLimitKey = generateGSCRateLimitKey(userId, 'insights');
+    const rateLimit = await checkRateLimit(env.GSC_CACHE, rateLimitKey, 50, 60); // 50 requests per minute
+    
+    if (rateLimit.limited) {
+        throw new RateLimitError(
+            'Rate limit exceeded',
+            rateLimit.remaining,
+            rateLimit.reset
+        );
+    }
+    
+    // Add rate limit headers to response
+    headers['X-RateLimit-Remaining'] = rateLimit.remaining.toString();
+    headers['X-RateLimit-Reset'] = rateLimit.reset.toString();
+    
+    // Get access token from KV
+    let accessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
+    
+    if (!accessToken) {
+        // Token expired, try to refresh
+        const refreshResult = await refreshToken(request, env);
+        if (!refreshResult.ok) {
+            throw new AuthError('Failed to refresh token', {
+                status: refreshResult.status,
+                statusText: refreshResult.statusText
+            });
+        }
+        
+        // Get new access token
+        const newAccessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
+        
+        // Validate new token exists
+        if (!newAccessToken) {
+            throw new AuthError('Failed to refresh access token');
+        }
+        
+        accessToken = newAccessToken;
+    }
+    
+    // Query Search Console API for data
+    const response = await fetch(
+        `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
+        {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                startDate,
+                endDate,
+                dimensions: ['query', 'page'],
+                rowLimit: 1000
+            })
+        }
+    );
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new APIError(
+            'Failed to fetch GSC data',
+            response.status,
+            'GSC_API_ERROR',
+            { errorText }
+        );
+    }
+    
+    const data = await response.json();
+    
+    // Generate AI recommendations
+    const recommendations = await analyzeGSCData(data, {
+        dateRange: { startDate, endDate }
+    });
+    
+    return new Response(JSON.stringify({
+        success: true,
+        data: recommendations
+    }), {
+        headers: headers
+    });
+});
