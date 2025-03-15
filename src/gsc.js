@@ -119,13 +119,15 @@ export const getProperties = withErrorHandling(async (request, env) => {
         }
         
         const data = await response.json();
+        console.log('GSC API response data:', data);
         
         // Cache the successful response
         await setCachedData(env.GSC_CACHE, cacheKey, data, 3600); // Cache for 1 hour
         
+        // Ensure we're directly exposing the siteEntry array for frontend consistency
         return new Response(JSON.stringify({
             success: true,
-            data: data,
+            siteEntry: data.siteEntry || [],
             cached: false
         }), { headers });
         
