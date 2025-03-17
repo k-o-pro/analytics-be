@@ -149,109 +149,219 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
     const userId = request.user.user_id;
     const headers = createCorsHeaders(env.FRONTEND_URL);
     
-    // Parse and validate request body
-    const body = await request.json();
-    validateRequiredFields(body, ['siteUrl', 'startDate', 'endDate']);
-    
-    const { siteUrl, startDate, endDate, dimensions = ['query', 'page'] } = body;
-    
-    // Check rate limit before making API call
-    const rateLimitKey = generateGSCRateLimitKey(userId, 'searchAnalytics');
-    const rateLimit = await checkRateLimit(env.GSC_CACHE, rateLimitKey, 100, 60);
-    
-    if (rateLimit.limited) {
-        throw new RateLimitError(
-            'Rate limit exceeded',
-            rateLimit.remaining,
-            rateLimit.reset
-        );
-    }
-    
-    // Add rate limit headers to response
-    headers['X-RateLimit-Remaining'] = rateLimit.remaining.toString();
-    headers['X-RateLimit-Reset'] = rateLimit.reset.toString();
-    
-    // Get access token from KV
-    let accessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
-    
-    if (!accessToken) {
-        // Token expired, try to refresh
-        const refreshResult = await refreshToken(request, env);
-        if (!refreshResult.ok) {
-            throw new AuthError('Failed to refresh token', {
-                status: refreshResult.status,
-                statusText: refreshResult.statusText
-            });
-        }
-        
-        // Get new access token
-        const newAccessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
-        
-        // Validate new token exists
-        if (!newAccessToken) {
-            throw new AuthError('Failed to refresh access token');
-        }
-        
-        accessToken = newAccessToken;
-    }
-    
-    // Query Search Console API
-    const response = await fetch(
-        `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
-        {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                startDate,
-                endDate,
-                dimensions,
-                rowLimit: 500
-            })
-        }
-    );
-    
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new APIError(
-            'Failed to fetch GSC data',
-            response.status,
-            'GSC_API_ERROR',
-            { errorText }
-        );
-    }
-    
-    const data = await response.json();
-    
-    // Store data in database for historical tracking
-    const timestamp = new Date().toISOString();
-    const dataJson = JSON.stringify(data);
-    
     try {
-        await env.DB.prepare(
-            `INSERT INTO gsc_data (user_id, site_url, date_range, dimensions, data, created_at)
-             VALUES (?, ?, ?, ?, ?, ?)`
-        ).bind(
-            userId,
+        // Parse and validate request body
+        const body = await request.json();
+        validateRequiredFields(body, ['siteUrl', 'startDate', 'endDate']);
+        
+        const { siteUrl, startDate, endDate, dimensions = ['query', 'page'] } = body;
+        
+        console.log(`GSC data request for user ${userId}:`, {
             siteUrl,
-            `${startDate} to ${endDate}`,
-            dimensions.join(','),
-            dataJson,
-            timestamp
-        ).run();
+            startDate,
+            endDate,
+            dimensions
+        });
+        
+        // Check rate limit before making API call
+        const rateLimitKey = generateGSCRateLimitKey(userId, 'searchAnalytics');
+        const rateLimit = await checkRateLimit(env.GSC_CACHE, rateLimitKey, 100, 60);
+        
+        if (rateLimit.limited) {
+            throw new RateLimitError(
+                'Rate limit exceeded',
+                rateLimit.remaining,
+                rateLimit.reset
+            );
+        }
+        
+        // Add rate limit headers to response
+        headers['X-RateLimit-Remaining'] = rateLimit.remaining.toString();
+        headers['X-RateLimit-Reset'] = rateLimit.reset.toString();
+        
+        // Get access token from KV
+        let accessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
+        
+        if (!accessToken) {
+            // Token expired, try to refresh
+            console.log(`Access token not found for user ${userId}, refreshing...`);
+            const refreshResult = await refreshToken(request, env);
+            if (!refreshResult.ok) {
+                throw new AuthError('Failed to refresh token', {
+                    status: refreshResult.status,
+                    statusText: refreshResult.statusText
+                });
+            }
+            
+            // Get new access token
+            const newAccessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
+            
+            // Validate new token exists
+            if (!newAccessToken) {
+                throw new AuthError('Failed to refresh access token');
+            }
+            
+            accessToken = newAccessToken;
+        }
+        
+        // Handle different site URL formats
+        let encodedSiteUrl = encodeURIComponent(siteUrl);
+        console.log(`Encoded site URL: ${encodedSiteUrl}`);
+        
+        // Query Search Console API
+        console.log(`Fetching GSC data for ${siteUrl} from ${startDate} to ${endDate}`);
+        const requestBody = {
+            startDate,
+            endDate,
+            dimensions,
+            rowLimit: 500
+        };
+        
+        console.log(`Request body: ${JSON.stringify(requestBody)}`);
+        
+        const response = await fetch(
+            `https://www.googleapis.com/webmasters/v3/sites/${encodedSiteUrl}/searchAnalytics/query`,
+            {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            }
+        );
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`GSC API error (${response.status}):`, errorText);
+            
+            // If unauthorized, token might be invalid, try refreshing once
+            if (response.status === 401) {
+                console.log('Access token invalid, refreshing and retrying...');
+                await env.AUTH_STORE.delete(`gsc_token:${userId}`);
+                
+                // Refresh token
+                const refreshResult = await refreshToken(request, env);
+                if (!refreshResult.ok) {
+                    throw new AuthError('Failed to refresh token after 401', {
+                        status: refreshResult.status,
+                        statusText: refreshResult.statusText
+                    });
+                }
+                
+                // Get new access token
+                const newAccessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
+                if (!newAccessToken) {
+                    throw new AuthError('Failed to get new access token after refresh');
+                }
+                
+                // Retry with new token
+                const retryResponse = await fetch(
+                    `https://www.googleapis.com/webmasters/v3/sites/${encodedSiteUrl}/searchAnalytics/query`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${newAccessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(requestBody)
+                    }
+                );
+                
+                if (!retryResponse.ok) {
+                    const retryErrorText = await retryResponse.text();
+                    console.error(`GSC API retry error (${retryResponse.status}):`, retryErrorText);
+                    throw new APIError(
+                        'Failed to fetch GSC data after token refresh',
+                        retryResponse.status,
+                        'GSC_API_ERROR',
+                        { errorText: retryErrorText }
+                    );
+                }
+                
+                const retryData = await retryResponse.json();
+                return new Response(JSON.stringify({
+                    success: true,
+                    data: retryData,
+                    retried: true
+                }), {
+                    headers: headers
+                });
+            }
+            
+            // Handle empty data case
+            if (response.status === 404) {
+                console.log(`No data found for property ${siteUrl}`);
+                return new Response(JSON.stringify({
+                    success: true,
+                    data: { rows: [] },
+                    message: 'No data available for this property'
+                }), {
+                    headers: headers
+                });
+            }
+            
+            throw new APIError(
+                `Failed to fetch GSC data: ${errorText}`,
+                response.status,
+                'GSC_API_ERROR',
+                { 
+                    errorText,
+                    siteUrl,
+                    startDate,
+                    endDate 
+                }
+            );
+        }
+        
+        const data = await response.json();
+        console.log(`Successfully fetched GSC data for ${siteUrl}, rows:`, data.rows?.length || 0);
+        
+        // Store data in database for historical tracking
+        const timestamp = new Date().toISOString();
+        const dataJson = JSON.stringify(data);
+        
+        try {
+            await env.DB.prepare(
+                `INSERT INTO gsc_data (user_id, site_url, date_range, dimensions, data, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)`
+            ).bind(
+                userId,
+                siteUrl,
+                `${startDate} to ${endDate}`,
+                dimensions.join(','),
+                dataJson,
+                timestamp
+            ).run();
+        } catch (error) {
+            console.error('Failed to store GSC data:', error);
+            // Don't throw here, as the API call was successful
+        }
+        
+        return new Response(JSON.stringify({
+            success: true,
+            data: data
+        }), {
+            headers: headers
+        });
     } catch (error) {
-        console.error('Failed to store GSC data:', error);
-        // Don't throw here, as the API call was successful
+        console.error('Error in fetchGSCData:', error);
+        
+        // Provide a clearer error response
+        const errorResponse = {
+            success: false,
+            error: error.message || 'Unknown error occurred',
+            errorCode: error.code || 'UNKNOWN_ERROR',
+            errorDetails: error.details || {}
+        };
+        
+        const statusCode = error.status || 500;
+        
+        return new Response(JSON.stringify(errorResponse), {
+            status: statusCode,
+            headers: headers
+        });
     }
-    
-    return new Response(JSON.stringify({
-        success: true,
-        data: data
-    }), {
-        headers: headers
-    });
 });
 
 // Get top pages
