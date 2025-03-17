@@ -204,7 +204,14 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
             accessToken = newAccessToken;
         }
         
-        // Handle different site URL formats
+        // Normalize and handle different site URL formats
+        // GSC URLs can be in different formats: sc-domain:example.com, https://example.com/, etc.
+        let siteDomain = siteUrl;
+        
+        // Log the input URL to help debug
+        console.log(`Original site URL: ${siteUrl}`);
+        
+        // Properly encode the URL
         let encodedSiteUrl = encodeURIComponent(siteUrl);
         console.log(`Encoded site URL: ${encodedSiteUrl}`);
         
@@ -230,6 +237,9 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
                 body: JSON.stringify(requestBody)
             }
         );
+        
+        // Log the GSC API response status to help debug
+        console.log(`GSC API response status: ${response.status}`);
         
         if (!response.ok) {
             const errorText = await response.text();
@@ -271,15 +281,25 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
                 if (!retryResponse.ok) {
                     const retryErrorText = await retryResponse.text();
                     console.error(`GSC API retry error (${retryResponse.status}):`, retryErrorText);
+                    
+                    // Provide detailed error information
                     throw new APIError(
-                        'Failed to fetch GSC data after token refresh',
+                        `Failed to fetch GSC data after token refresh: ${retryErrorText}`,
                         retryResponse.status,
                         'GSC_API_ERROR',
-                        { errorText: retryErrorText }
+                        { 
+                            errorText: retryErrorText,
+                            siteUrl,
+                            encodedSiteUrl,
+                            startDate,
+                            endDate
+                        }
                     );
                 }
                 
                 const retryData = await retryResponse.json();
+                console.log(`Successfully fetched GSC data after token refresh for ${siteUrl}`);
+                
                 return new Response(JSON.stringify({
                     success: true,
                     data: retryData,
@@ -289,18 +309,40 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
                 });
             }
             
-            // Handle empty data case
+            // Handle property not found (404) error specifically
             if (response.status === 404) {
                 console.log(`No data found for property ${siteUrl}`);
+                
+                // Check if site URL might be in the wrong format and suggest alternatives
+                let errorMessage = 'No data available for this property.';
+                let suggestions = [];
+                
+                if (!siteUrl.startsWith('sc-domain:') && !siteUrl.startsWith('http')) {
+                    suggestions.push(`sc-domain:${siteUrl}`);
+                }
+                
+                if (siteUrl.startsWith('https://') || siteUrl.startsWith('http://')) {
+                    // Remove trailing slash if present
+                    const domainOnly = siteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+                    suggestions.push(`sc-domain:${domainOnly}`);
+                }
+                
+                if (suggestions.length > 0) {
+                    errorMessage += ` You might try using one of these formats instead: ${suggestions.join(', ')}`;
+                }
+                
                 return new Response(JSON.stringify({
                     success: true,
                     data: { rows: [] },
-                    message: 'No data available for this property'
+                    message: errorMessage,
+                    notFound: true,
+                    suggestions
                 }), {
                     headers: headers
                 });
             }
             
+            // Provide more detailed error information
             throw new APIError(
                 `Failed to fetch GSC data: ${errorText}`,
                 response.status,
@@ -308,6 +350,7 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
                 { 
                     errorText,
                     siteUrl,
+                    encodedSiteUrl,
                     startDate,
                     endDate 
                 }
