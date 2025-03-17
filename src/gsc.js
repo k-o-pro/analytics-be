@@ -8,7 +8,8 @@ import {
     RateLimitError,
     createCorsHeaders,
     withErrorHandling,
-    NotFoundError
+    NotFoundError,
+    APIError
 } from './utils/errors.js';
 
 // Helper function to validate required fields in request body
@@ -165,6 +166,7 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
     try {
         // Parse and validate request body
         const body = await request.json();
+        console.log(`Request body for fetchGSCData:`, JSON.stringify(body));
         validateRequiredFields(body, ['siteUrl', 'startDate', 'endDate']);
         
         const { siteUrl, startDate, endDate, dimensions = ['query', 'page'] } = body;
@@ -363,6 +365,37 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
                         notFound: true,
                         suggestions
                     }), {
+                        headers: headers
+                    });
+                }
+                
+                // Handle permission errors (403 Forbidden)
+                if (response.status === 403) {
+                    console.log(`User does not have permission for site ${siteUrl}`);
+                    
+                    const errorText = await response.text();
+                    console.error(`GSC API error (${response.status}):`, errorText);
+                    
+                    // Parse the error message to extract the reason
+                    let errorMessage = 'You do not have permission to access this site in Google Search Console.';
+                    try {
+                        const errorData = JSON.parse(errorText);
+                        if (errorData.error && errorData.error.message) {
+                            errorMessage = errorData.error.message;
+                        }
+                    } catch (parseError) {
+                        console.error('Error parsing 403 response:', parseError);
+                    }
+                    
+                    // Return a more user-friendly response
+                    return new Response(JSON.stringify({
+                        success: false,
+                        error: errorMessage,
+                        code: 'PERMISSION_DENIED',
+                        data: { rows: [] },
+                        permissionDenied: true
+                    }), {
+                        status: 403,
                         headers: headers
                     });
                 }
