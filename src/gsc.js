@@ -11,6 +11,19 @@ import {
     NotFoundError
 } from './utils/errors.js';
 
+// Helper function to validate required fields in request body
+function validateRequiredFields(body, requiredFields) {
+    const missingFields = requiredFields.filter(field => !body[field]);
+    
+    if (missingFields.length > 0) {
+        throw new ValidationError('Missing required fields', {
+            missing: missingFields
+        });
+    }
+    
+    return true;
+}
+
 // Get user's GSC properties
 export const getProperties = withErrorHandling(async (request, env) => {
     const userId = request.user.user_id;
@@ -211,8 +224,16 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
         // Log the input URL to help debug
         console.log(`Original site URL: ${siteUrl}`);
         
+        // Make sure URLs are correctly formatted for the GSC API
+        if (!siteUrl.startsWith('sc-domain:') && !siteUrl.startsWith('http://') && !siteUrl.startsWith('https://')) {
+            console.log(`Adding sc-domain: prefix to ${siteUrl}`);
+            siteDomain = `sc-domain:${siteUrl}`;
+        } else {
+            siteDomain = siteUrl;
+        }
+        
         // Properly encode the URL
-        let encodedSiteUrl = encodeURIComponent(siteUrl);
+        let encodedSiteUrl = encodeURIComponent(siteDomain);
         console.log(`Encoded site URL: ${encodedSiteUrl}`);
         
         // Query Search Console API
@@ -226,167 +247,189 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
         
         console.log(`Request body: ${JSON.stringify(requestBody)}`);
         
-        const response = await fetch(
-            `https://www.googleapis.com/webmasters/v3/sites/${encodedSiteUrl}/searchAnalytics/query`,
-            {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestBody)
-            }
-        );
-        
-        // Log the GSC API response status to help debug
-        console.log(`GSC API response status: ${response.status}`);
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`GSC API error (${response.status}):`, errorText);
+        try {
+            const apiUrl = `https://www.googleapis.com/webmasters/v3/sites/${encodedSiteUrl}/searchAnalytics/query`;
+            console.log(`API URL: ${apiUrl}`);
             
-            // If unauthorized, token might be invalid, try refreshing once
-            if (response.status === 401) {
-                console.log('Access token invalid, refreshing and retrying...');
-                await env.AUTH_STORE.delete(`gsc_token:${userId}`);
+            const response = await fetch(
+                apiUrl,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                }
+            );
+            
+            // Log the GSC API response status to help debug
+            console.log(`GSC API response status: ${response.status}`);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`GSC API error (${response.status}):`, errorText);
                 
-                // Refresh token
-                const refreshResult = await refreshToken(request, env);
-                if (!refreshResult.ok) {
-                    throw new AuthError('Failed to refresh token after 401', {
-                        status: refreshResult.status,
-                        statusText: refreshResult.statusText
+                // If unauthorized, token might be invalid, try refreshing once
+                if (response.status === 401) {
+                    console.log('Access token invalid, refreshing and retrying...');
+                    await env.AUTH_STORE.delete(`gsc_token:${userId}`);
+                    
+                    // Refresh token
+                    const refreshResult = await refreshToken(request, env);
+                    if (!refreshResult.ok) {
+                        throw new AuthError('Failed to refresh token after 401', {
+                            status: refreshResult.status,
+                            statusText: refreshResult.statusText
+                        });
+                    }
+                    
+                    // Get new access token
+                    const newAccessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
+                    if (!newAccessToken) {
+                        throw new AuthError('Failed to get new access token after refresh');
+                    }
+                    
+                    // Retry with new token
+                    const retryResponse = await fetch(
+                        apiUrl,
+                        {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${newAccessToken}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(requestBody)
+                        }
+                    );
+                    
+                    if (!retryResponse.ok) {
+                        const retryErrorText = await retryResponse.text();
+                        console.error(`GSC API retry error (${retryResponse.status}):`, retryErrorText);
+                        
+                        // Provide detailed error information
+                        throw new APIError(
+                            `Failed to fetch GSC data after token refresh: ${retryErrorText}`,
+                            retryResponse.status,
+                            'GSC_API_ERROR',
+                            { 
+                                errorText: retryErrorText,
+                                siteUrl,
+                                encodedSiteUrl,
+                                startDate,
+                                endDate
+                            }
+                        );
+                    }
+                    
+                    const retryData = await retryResponse.json();
+                    console.log(`Successfully fetched GSC data after token refresh for ${siteUrl}`);
+                    
+                    return new Response(JSON.stringify({
+                        success: true,
+                        data: retryData,
+                        retried: true
+                    }), {
+                        headers: headers
                     });
                 }
                 
-                // Get new access token
-                const newAccessToken = await env.AUTH_STORE.get(`gsc_token:${userId}`);
-                if (!newAccessToken) {
-                    throw new AuthError('Failed to get new access token after refresh');
+                // Handle property not found (404) error specifically
+                if (response.status === 404) {
+                    console.log(`No data found for property ${siteUrl}`);
+                    
+                    // Check if site URL might be in the wrong format and suggest alternatives
+                    let errorMessage = 'No data available for this property.';
+                    let suggestions = [];
+                    
+                    if (!siteUrl.startsWith('sc-domain:') && !siteUrl.startsWith('http')) {
+                        suggestions.push(`sc-domain:${siteUrl}`);
+                    }
+                    
+                    if (siteUrl.startsWith('https://') || siteUrl.startsWith('http://')) {
+                        // Remove trailing slash if present
+                        const domainOnly = siteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+                        suggestions.push(`sc-domain:${domainOnly}`);
+                    }
+                    
+                    if (suggestions.length > 0) {
+                        errorMessage += ` You might try using one of these formats instead: ${suggestions.join(', ')}`;
+                    }
+                    
+                    return new Response(JSON.stringify({
+                        success: true,
+                        data: { rows: [] },
+                        message: errorMessage,
+                        notFound: true,
+                        suggestions
+                    }), {
+                        headers: headers
+                    });
                 }
                 
-                // Retry with new token
-                const retryResponse = await fetch(
-                    `https://www.googleapis.com/webmasters/v3/sites/${encodedSiteUrl}/searchAnalytics/query`,
-                    {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${newAccessToken}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify(requestBody)
+                // Provide more detailed error information
+                throw new APIError(
+                    `Failed to fetch GSC data: ${errorText}`,
+                    response.status,
+                    'GSC_API_ERROR',
+                    { 
+                        errorText,
+                        siteUrl,
+                        encodedSiteUrl,
+                        startDate,
+                        endDate 
                     }
                 );
-                
-                if (!retryResponse.ok) {
-                    const retryErrorText = await retryResponse.text();
-                    console.error(`GSC API retry error (${retryResponse.status}):`, retryErrorText);
-                    
-                    // Provide detailed error information
-                    throw new APIError(
-                        `Failed to fetch GSC data after token refresh: ${retryErrorText}`,
-                        retryResponse.status,
-                        'GSC_API_ERROR',
-                        { 
-                            errorText: retryErrorText,
-                            siteUrl,
-                            encodedSiteUrl,
-                            startDate,
-                            endDate
-                        }
-                    );
-                }
-                
-                const retryData = await retryResponse.json();
-                console.log(`Successfully fetched GSC data after token refresh for ${siteUrl}`);
-                
-                return new Response(JSON.stringify({
-                    success: true,
-                    data: retryData,
-                    retried: true
-                }), {
-                    headers: headers
-                });
             }
             
-            // Handle property not found (404) error specifically
-            if (response.status === 404) {
-                console.log(`No data found for property ${siteUrl}`);
-                
-                // Check if site URL might be in the wrong format and suggest alternatives
-                let errorMessage = 'No data available for this property.';
-                let suggestions = [];
-                
-                if (!siteUrl.startsWith('sc-domain:') && !siteUrl.startsWith('http')) {
-                    suggestions.push(`sc-domain:${siteUrl}`);
-                }
-                
-                if (siteUrl.startsWith('https://') || siteUrl.startsWith('http://')) {
-                    // Remove trailing slash if present
-                    const domainOnly = siteUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
-                    suggestions.push(`sc-domain:${domainOnly}`);
-                }
-                
-                if (suggestions.length > 0) {
-                    errorMessage += ` You might try using one of these formats instead: ${suggestions.join(', ')}`;
-                }
-                
-                return new Response(JSON.stringify({
-                    success: true,
-                    data: { rows: [] },
-                    message: errorMessage,
-                    notFound: true,
-                    suggestions
-                }), {
-                    headers: headers
-                });
-            }
+            const data = await response.json();
+            console.log(`Successfully fetched GSC data for ${siteUrl}, rows:`, data.rows?.length || 0);
             
-            // Provide more detailed error information
-            throw new APIError(
-                `Failed to fetch GSC data: ${errorText}`,
-                response.status,
-                'GSC_API_ERROR',
-                { 
-                    errorText,
+            // Store data in database for historical tracking
+            const timestamp = new Date().toISOString();
+            const dataJson = JSON.stringify(data);
+            
+            try {
+                await env.DB.prepare(
+                    `INSERT INTO gsc_data (user_id, site_url, date_range, dimensions, data, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)`
+                ).bind(
+                    userId,
                     siteUrl,
-                    encodedSiteUrl,
-                    startDate,
-                    endDate 
-                }
-            );
-        }
-        
-        const data = await response.json();
-        console.log(`Successfully fetched GSC data for ${siteUrl}, rows:`, data.rows?.length || 0);
-        
-        // Store data in database for historical tracking
-        const timestamp = new Date().toISOString();
-        const dataJson = JSON.stringify(data);
-        
-        try {
-            await env.DB.prepare(
-                `INSERT INTO gsc_data (user_id, site_url, date_range, dimensions, data, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)`
-            ).bind(
-                userId,
-                siteUrl,
-                `${startDate} to ${endDate}`,
-                dimensions.join(','),
-                dataJson,
-                timestamp
-            ).run();
+                    `${startDate} to ${endDate}`,
+                    dimensions.join(','),
+                    dataJson,
+                    timestamp
+                ).run();
+            } catch (error) {
+                console.error('Failed to store GSC data:', error);
+                // Don't throw here, as the API call was successful
+            }
+            
+            return new Response(JSON.stringify({
+                success: true,
+                data: data
+            }), {
+                headers: headers
+            });
         } catch (error) {
-            console.error('Failed to store GSC data:', error);
-            // Don't throw here, as the API call was successful
+            console.error('Error in fetchGSCData:', error);
+            
+            // Provide a clearer error response
+            const errorResponse = {
+                success: false,
+                error: error.message || 'Unknown error occurred',
+                errorCode: error.code || 'UNKNOWN_ERROR',
+                errorDetails: error.details || {}
+            };
+            
+            const statusCode = error.status || 500;
+            
+            return new Response(JSON.stringify(errorResponse), {
+                status: statusCode,
+                headers: headers
+            });
         }
-        
-        return new Response(JSON.stringify({
-            success: true,
-            data: data
-        }), {
-            headers: headers
-        });
     } catch (error) {
         console.error('Error in fetchGSCData:', error);
         
