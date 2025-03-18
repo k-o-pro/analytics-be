@@ -269,7 +269,9 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
             console.log(`GSC API response status: ${response.status}`);
             
             if (!response.ok) {
-                const errorText = await response.text();
+                // Clone the response before reading the body
+                const responseClone = response.clone();
+                const errorText = await responseClone.text();
                 console.error(`GSC API error (${response.status}):`, errorText);
                 
                 // If unauthorized, token might be invalid, try refreshing once
@@ -306,7 +308,9 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
                     );
                     
                     if (!retryResponse.ok) {
-                        const retryErrorText = await retryResponse.text();
+                        // Clone the retry response before reading the body
+                        const retryResponseClone = retryResponse.clone();
+                        const retryErrorText = await retryResponseClone.text();
                         console.error(`GSC API retry error (${retryResponse.status}):`, retryErrorText);
                         
                         // Provide detailed error information
@@ -373,7 +377,9 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
                 if (response.status === 403) {
                     console.log(`User does not have permission for site ${siteUrl}`);
                     
-                    const errorText = await response.text();
+                    // Clone the response before reading the body
+                    const responseClone = response.clone();
+                    const errorText = await responseClone.text();
                     console.error(`GSC API error (${response.status}):`, errorText);
                     
                     // Parse the error message to extract the reason
