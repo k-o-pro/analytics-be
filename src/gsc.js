@@ -114,7 +114,9 @@ export const getProperties = withErrorHandling(async (request, env) => {
         );
         
         if (!response.ok) {
-            const errorText = await response.text();
+            // Clone the response before reading the body
+            const responseClone = response.clone();
+            const errorText = await responseClone.text();
             console.error(`GSC API error (${response.status}):`, errorText);
             
             // If unauthorized, token might be invalid, try refreshing
@@ -593,7 +595,9 @@ export const getTopPages = withErrorHandling(async (request, env) => {
     );
     
     if (!response.ok) {
-        const errorText = await response.text();
+        // Clone the response before reading the body
+        const responseClone = response.clone();
+        const errorText = await responseClone.text();
         throw new APIError(
             'Failed to fetch top pages',
             response.status,
