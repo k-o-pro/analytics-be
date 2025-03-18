@@ -425,6 +425,7 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
             
             const data = await response.json();
             console.log(`Successfully fetched GSC data for ${siteUrl}, rows:`, data.rows?.length || 0);
+            console.log('Data structure:', Object.keys(data));
             
             // Store data in database for historical tracking
             const timestamp = new Date().toISOString();
@@ -447,8 +448,10 @@ export const fetchGSCData = withErrorHandling(async (request, env) => {
                 // Don't throw here, as the API call was successful
             }
             
+            // Return both the rows at the top level and the full data for backward compatibility
             return new Response(JSON.stringify({
                 success: true,
+                rows: data.rows || [],
                 data: data
             }), {
                 headers: headers
