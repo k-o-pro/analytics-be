@@ -77,10 +77,19 @@ export function createErrorResponse(error, headers = {}) {
         headers['X-RateLimit-Reset'] = error.reset.toString();
     }
 
+    // Always include CORS headers
+    const corsHeaders = {
+        'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Credentials': 'true'
+    };
+
     return new Response(JSON.stringify(response), {
         status,
         headers: {
             'Content-Type': 'application/json',
+            ...corsHeaders,
             ...headers
         }
     });

@@ -1,10 +1,14 @@
 // Functions to generate insights using OpenAI API
+import { createCorsHeaders } from './utils/errors.js';
 
 // Generate overall insights
 export async function generateInsights(request, env) {
   try {
     // Clone the request at the beginning to avoid "Body already used" errors
     const clonedRequest = request.clone();
+    
+    // Set up CORS headers early so they're available for all responses
+    const corsHeaders = createCorsHeaders(env.FRONTEND_URL);
     
     // Read the request body once and store the result
     const requestData = await clonedRequest.json();
@@ -18,9 +22,7 @@ export async function generateInsights(request, env) {
         error: 'Site URL is required'
       }), {
         status: 400,
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers: corsHeaders
       });
     }
     
@@ -35,7 +37,7 @@ export async function generateInsights(request, env) {
       console.log('Using mock data instead of calling OpenAI');
       generatedInsights = generateMockInsights(siteUrl, period);
       return new Response(JSON.stringify(generatedInsights), {
-        headers: { 'Content-Type': 'application/json' }
+        headers: corsHeaders
       });
     }
     
@@ -59,9 +61,7 @@ export async function generateInsights(request, env) {
           error: 'OpenAI API key not configured'
         }), {
           status: 500,
-          headers: {
-            'Content-Type': 'application/json'
-          }
+          headers: corsHeaders
         });
       }
     }
@@ -81,7 +81,7 @@ export async function generateInsights(request, env) {
       ).bind(existingInsight.id).first();
 
       return new Response(insight.content, {
-        headers: { 'Content-Type': 'application/json' }
+        headers: corsHeaders
       });
     }
 
@@ -95,7 +95,7 @@ export async function generateInsights(request, env) {
         error: 'Insufficient credits for insights generation'
       }), {
         status: 402,
-        headers: { 'Content-Type': 'application/json' }
+        headers: corsHeaders
       });
     }
 
@@ -225,14 +225,7 @@ export async function generateInsights(request, env) {
         // Return fallback insights instead of error
         const fallbackInsights = generateFallbackInsights(siteUrl, period);
         return new Response(JSON.stringify(fallbackInsights), {
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-            'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Allow-Credentials': 'true',
-            'Access-Control-Max-Age': '86400'
-          }
+          headers: corsHeaders
         });
       }
       
@@ -356,14 +349,7 @@ Tailor your analysis to the site's industry, size, and performance level evident
         // Return fallback insights instead of error
         const fallbackInsights = generateFallbackInsights(siteUrl, period);
         return new Response(JSON.stringify(fallbackInsights), {
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-            'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Allow-Credentials': 'true',
-            'Access-Control-Max-Age': '86400'
-          }
+          headers: corsHeaders
         });
       }
     } catch (fetchError) {
@@ -373,14 +359,7 @@ Tailor your analysis to the site's industry, size, and performance level evident
       // Return fallback insights instead of error
       const fallbackInsights = generateFallbackInsights(siteUrl, period);
       return new Response(JSON.stringify(fallbackInsights), {
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Allow-Credentials': 'true',
-          'Access-Control-Max-Age': '86400'
-        }
+        headers: corsHeaders
       });
     }
 
@@ -467,14 +446,7 @@ Tailor your analysis to the site's industry, size, and performance level evident
 
       // Return the successful insights response
       return new Response(JSON.stringify(generatedInsights), {
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Allow-Credentials': 'true',
-          'Access-Control-Max-Age': '86400'
-        }
+        headers: corsHeaders
       });
 
     } catch (error) {
@@ -482,14 +454,7 @@ Tailor your analysis to the site's industry, size, and performance level evident
       // Use fallback insights when OpenAI parsing fails
       const fallbackInsights = generateFallbackInsights(siteUrl, period);
       return new Response(JSON.stringify(fallbackInsights), {
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Allow-Credentials': 'true',
-          'Access-Control-Max-Age': '86400'
-        }
+        headers: corsHeaders
       });
     }
   } catch (error) {
@@ -513,14 +478,7 @@ Tailor your analysis to the site's industry, size, and performance level evident
         error.period || "the selected period"
       );
       return new Response(JSON.stringify(fallbackInsights), {
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Allow-Credentials': 'true',
-          'Access-Control-Max-Age': '86400'
-        }
+        headers: corsHeaders
       });
     } catch (fallbackError) {
       // If even the fallback generation fails, return an error
@@ -531,14 +489,7 @@ Tailor your analysis to the site's industry, size, and performance level evident
         errorDetails: process.env.NODE_ENV === 'development' ? error.message : undefined
       }), {
         status: statusCode,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Allow-Credentials': 'true',
-          'Access-Control-Max-Age': '86400'
-        }
+        headers: corsHeaders
       });
     }
   }
@@ -585,14 +536,7 @@ export async function generatePageInsights(request, env) {
         error.period || "the selected period"
       );
       return new Response(JSON.stringify(fallbackInsights), {
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Allow-Credentials': 'true',
-          'Access-Control-Max-Age': '86400'
-        }
+        headers: corsHeaders
       });
     } catch (fallbackError) {
       // If even the fallback generation fails, return an error
@@ -603,14 +547,7 @@ export async function generatePageInsights(request, env) {
         errorDetails: process.env.NODE_ENV === 'development' ? error.message : undefined
       }), {
         status: statusCode,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
-          'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Allow-Credentials': 'true',
-          'Access-Control-Max-Age': '86400'
-        }
+        headers: corsHeaders
       });
     }
   }
@@ -796,7 +733,6 @@ import {
     AuthError, 
     ValidationError, 
     RateLimitError,
-    createCorsHeaders,
     withErrorHandling,
     validateRequiredFields
 } from './utils/errors.js';

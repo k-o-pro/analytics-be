@@ -347,11 +347,21 @@ export default {
               return response;
             } catch (error) {
               console.error('Error generating insights:', error);
-              return createResponse({
+              // Apply CORS headers to the error response
+              return new Response(JSON.stringify({
                 success: false,
                 error: 'Failed to generate insights',
                 message: error.message
-              }, 500);
+              }), {
+                status: 500,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+                  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                  'Access-Control-Allow-Credentials': 'true'
+                }
+              });
             }
           }
           
@@ -367,11 +377,21 @@ export default {
               return response;
             } catch (error) {
               console.error('Error generating page insights:', error);
-              return createResponse({
+              // Apply CORS headers to the error response
+              return new Response(JSON.stringify({
                 success: false,
                 error: 'Failed to generate page insights',
                 message: error.message
-              }, 500);
+              }), {
+                status: 500,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Access-Control-Allow-Origin': 'https://analytics.k-o.pro',
+                  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+                  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                  'Access-Control-Allow-Credentials': 'true'
+                }
+              });
             }
           }
           
