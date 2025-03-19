@@ -114,6 +114,8 @@ export async function generateInsights(request, env) {
       3. Areas for improvement
       4. Specific actionable recommendations
       
+      IMPORTANT: Only use actual URLs, keywords and metrics from the provided data. DO NOT use placeholder values like 'keyword1', 'example-page1', or 'X%'. Always refer to real keywords, real pages, and exact percentage values from the data.
+      
       Format the response as a JSON object with the following structure:
       {
         "summary": "Concise 2-3 sentence executive summary highlighting the most significant trend and business impact",
@@ -178,6 +180,8 @@ export async function generateInsights(request, env) {
       7. Ensure recommendations are specific, realistic, and prioritized by impact vs. effort
 
       Tailor your analysis to the site's industry, size, and performance level evident in the data.
+      
+      Remember: Use ONLY actual keywords, URLs, and metrics from the provided data. Do not use placeholders.
     `;
 
     // Prepare a safe version of the data to send to OpenAI
@@ -193,7 +197,7 @@ export async function generateInsights(request, env) {
     // Enhanced debugging for request
     console.log('Calling OpenAI with request data:', {
       url: env.OPENAI_API_URL,
-      model: "gpt-3.5-turbo", // Using the standard model which is more reliable
+      model: "gpt-4o-2024-08-06", // Update logging to show the new model
       apiKeyLength: env.OPENAI_API_KEY ? env.OPENAI_API_KEY.length : 0,
       promptLength: prompt.length
     });
@@ -207,7 +211,7 @@ export async function generateInsights(request, env) {
       // Log the actual request being sent
       console.log('OpenAI API request:', {
         url: env.OPENAI_API_URL,
-        model: "gpt-3.5-turbo",
+        model: "gpt-4o", // Update logging to show the new model
         promptFirstChars: prompt.substring(0, 50),
         hasValidApiKey: !!env.OPENAI_API_KEY
       });
@@ -238,7 +242,7 @@ export async function generateInsights(request, env) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            model: "gpt-3.5-turbo", // Using the standard model which is more reliable
+            model: "gpt-4o", // Changed from gpt-3.5-turbo to the more advanced GPT-4o model
             messages: [
               { 
                 role: "system", 
@@ -298,6 +302,8 @@ Format your entire response as a valid JSON object with the following structure:
     "analysis": "Brief analysis of keyword trends and patterns"
   }
 }
+
+IMPORTANT: You must only use the real data provided from Google Search Console. Do not use placeholder values like 'keyword1', 'keyword2', 'example-page1', etc. Always refer to actual keywords, pages, and metrics from the data.
 
 When analyzing data:
 1. Prioritize insights that show clear causation, not just correlation
@@ -556,70 +562,70 @@ export async function generatePageInsights(request, env) {
 // Helper function to generate fallback insights when OpenAI API fails
 function generateFallbackInsights(siteUrl, period) {
   return {
-    summary: `Analysis of site performance for ${siteUrl} during ${period}. This is a fallback analysis since the AI service is currently unavailable.`,
+    summary: `[FALLBACK DATA] Analysis of site performance for ${siteUrl} during ${period}. This is a fallback analysis since the AI service is currently unavailable.`,
     performance: {
       trend: "stable",
       changePercent: "0%",
       timePeriod: period,
       keyMetricChanges: [
-        {metric: "clicks", change: "0%", interpretation: "Data temporarily unavailable"},
-        {metric: "impressions", change: "0%", interpretation: "Data temporarily unavailable"},
-        {metric: "ctr", change: "0%", interpretation: "Data temporarily unavailable"},
-        {metric: "position", change: "0%", interpretation: "Data temporarily unavailable"}
+        {metric: "clicks", change: "0%", interpretation: "[FALLBACK] Data temporarily unavailable"},
+        {metric: "impressions", change: "0%", interpretation: "[FALLBACK] Data temporarily unavailable"},
+        {metric: "ctr", change: "0%", interpretation: "[FALLBACK] Data temporarily unavailable"},
+        {metric: "position", change: "0%", interpretation: "[FALLBACK] Data temporarily unavailable"}
       ],
-      details: "Performance trend analysis is currently unavailable. Please check your Google Search Console for the most up-to-date metrics."
+      details: "[FALLBACK DATA] Performance trend analysis is currently unavailable. Please check your Google Search Console for the most up-to-date metrics."
     },
     topFindings: [
       {
-        title: "AI Analysis Unavailable",
+        title: "[FALLBACK] AI Analysis Unavailable",
         description: "Our AI analysis service is temporarily unavailable. We're working to restore it as soon as possible.",
         impactLevel: "medium",
-        dataPoints: ["Service disruption detected", "Engineering team notified"]
+        dataPoints: ["[FALLBACK] Service disruption detected", "[FALLBACK] Engineering team notified"]
       },
       {
-        title: "Basic SEO Recommendations",
+        title: "[FALLBACK] Basic SEO Recommendations",
         description: "In the meantime, we recommend checking your site for basic SEO best practices: meta descriptions, title tags, mobile-friendliness, and site speed.",
         impactLevel: "medium",
-        dataPoints: ["These are general best practices", "Specific data analysis will resume soon"]
+        dataPoints: ["[FALLBACK] These are general best practices", "[FALLBACK] Specific data analysis will resume soon"]
       }
     ],
     opportunities: [
       {
-        title: "Review Previous Insights",
+        title: "[FALLBACK] Review Previous Insights",
         description: "While waiting for the service to be restored, you can review previous insights and implement any pending recommendations.",
-        estimatedImpact: "Varies by recommendation",
+        estimatedImpact: "[FALLBACK] Varies by recommendation",
         difficulty: "easy",
         timeFrame: "immediate"
       }
     ],
     recommendations: [
       {
-        title: "Check Google Search Console",
+        title: "[FALLBACK] Check Google Search Console",
         description: "Review your performance metrics directly in Google Search Console for the most accurate data.",
         priority: "high",
-        expectedOutcome: "Access to accurate, real-time data",
-        implementationSteps: ["Log in to Google Search Console", "Review Performance section"]
+        expectedOutcome: "[FALLBACK] Access to accurate, real-time data",
+        implementationSteps: ["[FALLBACK] Log in to Google Search Console", "[FALLBACK] Review Performance section"]
       },
       {
-        title: "Try Again Later",
+        title: "[FALLBACK] Try Again Later",
         description: "Our AI analysis service should be available again soon. Please try again in a few hours.",
         priority: "medium",
-        expectedOutcome: "Access to AI-powered insights",
-        implementationSteps: ["Check back in 2-3 hours"]
+        expectedOutcome: "[FALLBACK] Access to AI-powered insights",
+        implementationSteps: ["[FALLBACK] Check back in 2-3 hours"]
       },
       {
-        title: "Monitor Keywords",
+        title: "[FALLBACK] Monitor Keywords",
         description: "Keep track of your top-performing keywords and look for opportunities to improve rankings.",
         priority: "medium",
-        expectedOutcome: "Maintain awareness of keyword performance",
-        implementationSteps: ["Check positions for key terms", "Note any significant changes"]
+        expectedOutcome: "[FALLBACK] Maintain awareness of keyword performance",
+        implementationSteps: ["[FALLBACK] Check positions for key terms", "[FALLBACK] Note any significant changes"]
       }
     ],
     keywordInsights: {
-      risingKeywords: [],
-      decliningKeywords: [],
-      missedOpportunities: [],
-      analysis: "Keyword trend analysis is temporarily unavailable."
+      risingKeywords: ["[FALLBACK] No data available"],
+      decliningKeywords: ["[FALLBACK] No data available"],
+      missedOpportunities: ["[FALLBACK] No data available"],
+      analysis: "[FALLBACK DATA] Keyword trend analysis is temporarily unavailable."
     }
   };
 }
@@ -627,103 +633,101 @@ function generateFallbackInsights(siteUrl, period) {
 // Helper function to generate mock insights for testing
 function generateMockInsights(siteUrl, period) {
   return {
-    summary: `Analysis of ${siteUrl} shows a 15% improvement in overall performance over ${period}. There are significant opportunities to improve CTR on high-impression pages, which could result in substantial traffic gains.`,
+    summary: `[MOCK DATA] Analysis of ${siteUrl} shows improvement in overall performance over ${period}. This is generated mock data for testing purposes only and does not represent actual GSC data.`,
     performance: {
       trend: "up",
       changePercent: "15%",
       timePeriod: period,
       keyMetricChanges: [
-        {metric: "clicks", change: "+22%", interpretation: "Strong growth indicating improved visibility and relevance"},
-        {metric: "impressions", change: "+15%", interpretation: "Expanded reach in search results"},
-        {metric: "ctr", change: "+8%", interpretation: "Better engagement with search snippets"},
-        {metric: "position", change: "-0.7", interpretation: "Improved average ranking positions"}
+        {metric: "clicks", change: "+22%", interpretation: "Strong growth indicating improved visibility and relevance [MOCK DATA]"},
+        {metric: "impressions", change: "+15%", interpretation: "Expanded reach in search results [MOCK DATA]"},
+        {metric: "ctr", change: "+8%", interpretation: "Better engagement with search snippets [MOCK DATA]"},
+        {metric: "position", change: "-0.7", interpretation: "Improved average ranking positions [MOCK DATA]"}
       ],
-      details: "Overall impressions increased by 15% while clicks increased by 22%, indicating improving engagement. CTR improvements suggest your title tags and meta descriptions are becoming more effective."
+      details: "[MOCK DATA] This is simulated performance data for testing purposes. In a real analysis, this would contain detailed trends based on actual GSC metrics."
     },
     topFindings: [
       {
-        title: "Increased Mobile Traffic",
-        description: "Mobile traffic has increased by 27% compared to the previous period, suggesting your site is performing well on mobile devices.",
+        title: "[MOCK DATA] Mobile Traffic Trend",
+        description: "This is mock data for testing purposes. Real analysis would include actual metrics and specific insights based on your GSC data.",
         impactLevel: "high",
-        dataPoints: ["Mobile clicks: +27%", "Mobile CTR: +12%", "Core Web Vitals all in 'good' range"]
+        dataPoints: ["Mock data point 1", "Mock data point 2", "Mock data point 3"]
       },
       {
-        title: "Strong Performance for Key Terms",
-        description: "Your site ranks in top 5 positions for several important keywords, with good CTR for most.",
+        title: "[MOCK DATA] Search Performance",
+        description: "This is mock data for testing purposes. Real analysis would include actual metrics and specific insights based on your GSC data.",
         impactLevel: "high",
-        dataPoints: ["5 keywords in positions 1-3", "Average CTR for top terms: 15.8%"]
+        dataPoints: ["Mock data point 1", "Mock data point 2"]
       },
       {
-        title: "Product Pages Underperforming",
-        description: "Several product pages have high impressions but low CTR (below 2%), indicating potential issues with meta descriptions or title tags.",
+        title: "[MOCK DATA] Content Performance",
+        description: "This is mock data for testing purposes. Real analysis would include actual metrics and specific insights based on your GSC data.",
         impactLevel: "medium",
-        dataPoints: ["Product pages avg CTR: 1.8%", "Category pages avg CTR: 4.5%"]
+        dataPoints: ["Mock data point 1", "Mock data point 2"]
       }
     ],
     opportunities: [
       {
-        title: "Improve Product Page CTR",
-        description: "Several product pages show high impression counts but CTR below 2%. Optimizing titles and descriptions could significantly increase traffic.",
-        estimatedImpact: "+15-20% clicks to product pages",
+        title: "[MOCK DATA] Opportunity 1",
+        description: "This is mock data for testing purposes. Real analysis would include specific opportunities based on your actual GSC data.",
+        estimatedImpact: "[MOCK] Impact estimate",
         difficulty: "easy",
         timeFrame: "short-term"
       },
       {
-        title: "Target Featured Snippets",
-        description: "For 3 high-volume keywords, your content ranks on page 1 but isn't capturing featured snippets.",
-        estimatedImpact: "+30-40% CTR for those terms",
+        title: "[MOCK DATA] Opportunity 2",
+        description: "This is mock data for testing purposes. Real analysis would include specific opportunities based on your actual GSC data.",
+        estimatedImpact: "[MOCK] Impact estimate",
         difficulty: "moderate",
         timeFrame: "medium-term"
       },
       {
-        title: "Mobile Page Speed Optimization",
-        description: "While mobile traffic is increasing, FID metrics could be improved to further enhance mobile experience.",
-        estimatedImpact: "+5-8% conversion rate",
+        title: "[MOCK DATA] Opportunity 3",
+        description: "This is mock data for testing purposes. Real analysis would include specific opportunities based on your actual GSC data.",
+        estimatedImpact: "[MOCK] Impact estimate",
         difficulty: "complex",
         timeFrame: "long-term"
       }
     ],
     recommendations: [
       {
-        title: "Optimize Product Page Metadata",
-        description: "Revise title tags and meta descriptions for product pages to improve CTR from search results.",
+        title: "[MOCK DATA] Recommendation 1",
+        description: "This is mock data for testing purposes. Real recommendations would be based on your actual GSC data.",
         priority: "high",
-        expectedOutcome: "10-15% increase in product page traffic",
+        expectedOutcome: "[MOCK] Expected outcome",
         implementationSteps: [
-          "Audit current product page titles and meta descriptions",
-          "Incorporate pricing and USPs in meta descriptions",
-          "Add action words in titles",
-          "Implement and monitor for 2 weeks"
+          "[MOCK] Step 1",
+          "[MOCK] Step 2",
+          "[MOCK] Step 3"
         ]
       },
       {
-        title: "Create Content for Rising Keywords",
-        description: "Develop new content targeting keywords that are showing increasing search volume in your niche.",
+        title: "[MOCK DATA] Recommendation 2",
+        description: "This is mock data for testing purposes. Real recommendations would be based on your actual GSC data.",
         priority: "medium",
-        expectedOutcome: "Capture early traffic from trending topics",
+        expectedOutcome: "[MOCK] Expected outcome",
         implementationSteps: [
-          "Focus on keywords: 'sustainable products', 'eco-friendly alternatives'",
-          "Create comprehensive guides for each topic",
-          "Interlink with relevant product pages"
+          "[MOCK] Step 1",
+          "[MOCK] Step 2"
         ]
       },
       {
-        title: "Improve Page Load Speed",
-        description: "Several key landing pages could benefit from performance optimization to improve Core Web Vitals metrics.",
+        title: "[MOCK DATA] Recommendation 3",
+        description: "This is mock data for testing purposes. Real recommendations would be based on your actual GSC data.",
         priority: "medium",
-        expectedOutcome: "Improved user experience and potential ranking boost",
+        expectedOutcome: "[MOCK] Expected outcome",
         implementationSteps: [
-          "Optimize image sizes and formats",
-          "Implement lazy loading",
-          "Minimize render-blocking resources"
+          "[MOCK] Step 1",
+          "[MOCK] Step 2",
+          "[MOCK] Step 3"
         ]
       }
     ],
     keywordInsights: {
-      risingKeywords: ["sustainable products", "eco-friendly alternatives", "organic materials"],
-      decliningKeywords: ["cheap products", "discount items", "low-cost alternatives"],
-      missedOpportunities: ["product comparison", "best alternatives to", "how to choose"],
-      analysis: "There's a clear shift towards sustainability and quality in search behavior. Users are less focused on price and more interested in environmental impact and product quality."
+      risingKeywords: ["[MOCK] Rising keyword 1", "[MOCK] Rising keyword 2", "[MOCK] Rising keyword 3"],
+      decliningKeywords: ["[MOCK] Declining keyword 1", "[MOCK] Declining keyword 2"],
+      missedOpportunities: ["[MOCK] Missed opportunity 1", "[MOCK] Missed opportunity 2"],
+      analysis: "[MOCK DATA] This is simulated keyword analysis for testing purposes. Real analysis would include actual keywords and trends from your GSC data."
     }
   };
 }
