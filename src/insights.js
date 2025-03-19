@@ -116,11 +116,68 @@ export async function generateInsights(request, env) {
       
       Format the response as a JSON object with the following structure:
       {
-        "summary": "Brief executive summary",
-        "performance": { "trend": "up/down/stable", "details": "..." },
-        "topFindings": [ {"title": "...", "description": "..."} ],
-        "recommendations": [ {"title": "...", "description": "...", "priority": "high/medium/low"} ]
+        "summary": "Concise 2-3 sentence executive summary highlighting the most significant trend and business impact",
+        
+        "performance": {
+          "trend": "up/down/stable/mixed",
+          "changePercent": "numerical percentage of overall change",
+          "timePeriod": "specify the analyzed time period",
+          "keyMetricChanges": [
+            {"metric": "clicks", "change": "+/-X%", "interpretation": "brief interpretation"},
+            {"metric": "impressions", "change": "+/-X%", "interpretation": "brief interpretation"},
+            {"metric": "ctr", "change": "+/-X%", "interpretation": "brief interpretation"},
+            {"metric": "position", "change": "+/-X%", "interpretation": "brief interpretation"}
+          ],
+          "details": "Deeper analysis of performance trends including correlations between metrics"
+        },
+        
+        "topFindings": [
+          {
+            "title": "Clear, specific finding title",
+            "description": "Detailed explanation with specific numbers and percentages",
+            "impactLevel": "high/medium/low",
+            "dataPoints": ["Specific supporting data point 1", "Specific supporting data point 2"]
+          }
+        ],
+        
+        "opportunities": [
+          {
+            "title": "Specific opportunity title",
+            "description": "Clear explanation of the opportunity with estimated potential impact",
+            "estimatedImpact": "Quantified potential improvement (e.g., '+10-15% CTR')",
+            "difficulty": "easy/moderate/complex",
+            "timeFrame": "immediate/short-term/long-term"
+          }
+        ],
+        
+        "recommendations": [
+          {
+            "title": "Action-oriented recommendation title",
+            "description": "Detailed, step-by-step explanation of implementation",
+            "priority": "high/medium/low",
+            "expectedOutcome": "Specific, measurable result expected",
+            "implementationSteps": ["Step 1...", "Step 2..."]
+          }
+        ],
+        
+        "keywordInsights": {
+          "risingKeywords": ["keyword 1", "keyword 2"],
+          "decliningKeywords": ["keyword 3", "keyword 4"],
+          "missedOpportunities": ["keyword 5", "keyword 6"],
+          "analysis": "Brief analysis of keyword trends and patterns"
+        }
       }
+
+      When analyzing data:
+      1. Prioritize insights that show clear causation, not just correlation
+      2. Focus on actionable findings that can drive measurable improvements
+      3. Provide specific, quantifiable metrics rather than general statements
+      4. Highlight unexpected patterns or anomalies that deserve attention
+      5. Consider technical SEO issues, content quality, user experience, and competitive factors
+      6. Always explain the business impact of technical findings
+      7. Ensure recommendations are specific, realistic, and prioritized by impact vs. effort
+
+      Tailor your analysis to the site's industry, size, and performance level evident in the data.
     `;
 
     // Prepare a safe version of the data to send to OpenAI
@@ -192,7 +249,73 @@ export async function generateInsights(request, env) {
             messages: [
               { 
                 role: "system", 
-                content: "You are an SEO and website analytics expert. Provide concise, actionable insights. Format your entire response as a valid JSON object with the following structure: {\"summary\": \"Brief executive summary\", \"performance\": {\"trend\": \"up/down/stable\", \"details\": \"...\"}, \"topFindings\": [{\"title\": \"...\", \"description\": \"...\"}], \"recommendations\": [{\"title\": \"...\", \"description\": \"...\", \"priority\": \"high/medium/low\"}]}" 
+                content: `You are an elite SEO and website analytics expert with 15+ years of experience in search performance analysis. Your task is to deliver strategic, data-driven insights that combine technical expertise with business value.
+
+Format your entire response as a valid JSON object with the following structure:
+
+{
+  "summary": "Concise 2-3 sentence executive summary highlighting the most significant trend and business impact",
+  
+  "performance": {
+    "trend": "up/down/stable/mixed",
+    "changePercent": "numerical percentage of overall change",
+    "timePeriod": "specify the analyzed time period",
+    "keyMetricChanges": [
+      {"metric": "clicks", "change": "+/-X%", "interpretation": "brief interpretation"},
+      {"metric": "impressions", "change": "+/-X%", "interpretation": "brief interpretation"},
+      {"metric": "ctr", "change": "+/-X%", "interpretation": "brief interpretation"},
+      {"metric": "position", "change": "+/-X%", "interpretation": "brief interpretation"}
+    ],
+    "details": "Deeper analysis of performance trends including correlations between metrics"
+  },
+  
+  "topFindings": [
+    {
+      "title": "Clear, specific finding title",
+      "description": "Detailed explanation with specific numbers and percentages",
+      "impactLevel": "high/medium/low",
+      "dataPoints": ["Specific supporting data point 1", "Specific supporting data point 2"]
+    }
+  ],
+  
+  "opportunities": [
+    {
+      "title": "Specific opportunity title",
+      "description": "Clear explanation of the opportunity with estimated potential impact",
+      "estimatedImpact": "Quantified potential improvement (e.g., '+10-15% CTR')",
+      "difficulty": "easy/moderate/complex",
+      "timeFrame": "immediate/short-term/long-term"
+    }
+  ],
+  
+  "recommendations": [
+    {
+      "title": "Action-oriented recommendation title",
+      "description": "Detailed, step-by-step explanation of implementation",
+      "priority": "high/medium/low",
+      "expectedOutcome": "Specific, measurable result expected",
+      "implementationSteps": ["Step 1...", "Step 2..."]
+    }
+  ],
+  
+  "keywordInsights": {
+    "risingKeywords": ["keyword 1", "keyword 2"],
+    "decliningKeywords": ["keyword 3", "keyword 4"],
+    "missedOpportunities": ["keyword 5", "keyword 6"],
+    "analysis": "Brief analysis of keyword trends and patterns"
+  }
+}
+
+When analyzing data:
+1. Prioritize insights that show clear causation, not just correlation
+2. Focus on actionable findings that can drive measurable improvements
+3. Provide specific, quantifiable metrics rather than general statements
+4. Highlight unexpected patterns or anomalies that deserve attention
+5. Consider technical SEO issues, content quality, user experience, and competitive factors
+6. Always explain the business impact of technical findings
+7. Ensure recommendations are specific, realistic, and prioritized by impact vs. effort
+
+Tailor your analysis to the site's industry, size, and performance level evident in the data.` 
               },
               { role: "user", content: prompt }
             ],
@@ -282,8 +405,34 @@ export async function generateInsights(request, env) {
         if (!generatedInsights.summary || 
             !generatedInsights.performance || 
             !generatedInsights.topFindings || 
-            !generatedInsights.recommendations) {
-          throw new Error('Missing required fields in OpenAI response');
+            !generatedInsights.recommendations ||
+            !generatedInsights.opportunities ||
+            !generatedInsights.keywordInsights) {
+          console.warn('Missing some required fields in OpenAI response. Using fallback format.');
+          
+          // Add missing fields with basic structure to avoid frontend errors
+          if (!generatedInsights.opportunities) {
+            generatedInsights.opportunities = [];
+          }
+          
+          if (!generatedInsights.keywordInsights) {
+            generatedInsights.keywordInsights = {
+              risingKeywords: [],
+              decliningKeywords: [],
+              missedOpportunities: [],
+              analysis: "No keyword analysis available"
+            };
+          }
+          
+          // Ensure performance object has the expected structure
+          if (generatedInsights.performance && !generatedInsights.performance.keyMetricChanges) {
+            generatedInsights.performance.keyMetricChanges = [
+              {metric: "clicks", change: "0%", interpretation: "No data available"},
+              {metric: "impressions", change: "0%", interpretation: "No data available"},
+              {metric: "ctr", change: "0%", interpretation: "No data available"},
+              {metric: "position", change: "0%", interpretation: "No data available"}
+            ];
+          }
         }
       } else {
         throw new Error('OpenAI response is not in JSON format');
@@ -473,77 +622,172 @@ function generateFallbackInsights(siteUrl, period) {
     summary: `Analysis of site performance for ${siteUrl} during ${period}. This is a fallback analysis since the AI service is currently unavailable.`,
     performance: {
       trend: "stable",
+      changePercent: "0%",
+      timePeriod: period,
+      keyMetricChanges: [
+        {metric: "clicks", change: "0%", interpretation: "Data temporarily unavailable"},
+        {metric: "impressions", change: "0%", interpretation: "Data temporarily unavailable"},
+        {metric: "ctr", change: "0%", interpretation: "Data temporarily unavailable"},
+        {metric: "position", change: "0%", interpretation: "Data temporarily unavailable"}
+      ],
       details: "Performance trend analysis is currently unavailable. Please check your Google Search Console for the most up-to-date metrics."
     },
     topFindings: [
       {
         title: "AI Analysis Unavailable",
-        description: "Our AI analysis service is temporarily unavailable. We're working to restore it as soon as possible."
+        description: "Our AI analysis service is temporarily unavailable. We're working to restore it as soon as possible.",
+        impactLevel: "medium",
+        dataPoints: ["Service disruption detected", "Engineering team notified"]
       },
       {
         title: "Basic SEO Recommendations",
-        description: "In the meantime, we recommend checking your site for basic SEO best practices: meta descriptions, title tags, mobile-friendliness, and site speed."
+        description: "In the meantime, we recommend checking your site for basic SEO best practices: meta descriptions, title tags, mobile-friendliness, and site speed.",
+        impactLevel: "medium",
+        dataPoints: ["These are general best practices", "Specific data analysis will resume soon"]
+      }
+    ],
+    opportunities: [
+      {
+        title: "Review Previous Insights",
+        description: "While waiting for the service to be restored, you can review previous insights and implement any pending recommendations.",
+        estimatedImpact: "Varies by recommendation",
+        difficulty: "easy",
+        timeFrame: "immediate"
       }
     ],
     recommendations: [
       {
         title: "Check Google Search Console",
         description: "Review your performance metrics directly in Google Search Console for the most accurate data.",
-        priority: "high"
+        priority: "high",
+        expectedOutcome: "Access to accurate, real-time data",
+        implementationSteps: ["Log in to Google Search Console", "Review Performance section"]
       },
       {
         title: "Try Again Later",
         description: "Our AI analysis service should be available again soon. Please try again in a few hours.",
-        priority: "medium"
+        priority: "medium",
+        expectedOutcome: "Access to AI-powered insights",
+        implementationSteps: ["Check back in 2-3 hours"]
       },
       {
         title: "Monitor Keywords",
         description: "Keep track of your top-performing keywords and look for opportunities to improve rankings.",
-        priority: "medium"
+        priority: "medium",
+        expectedOutcome: "Maintain awareness of keyword performance",
+        implementationSteps: ["Check positions for key terms", "Note any significant changes"]
       }
-    ]
+    ],
+    keywordInsights: {
+      risingKeywords: [],
+      decliningKeywords: [],
+      missedOpportunities: [],
+      analysis: "Keyword trend analysis is temporarily unavailable."
+    }
   };
 }
 
 // Helper function to generate mock insights for testing
 function generateMockInsights(siteUrl, period) {
   return {
-    summary: `Analysis of ${siteUrl} shows relatively stable performance over ${period}. There are opportunities to improve CTR on some high-impression pages.`,
+    summary: `Analysis of ${siteUrl} shows a 15% improvement in overall performance over ${period}. There are significant opportunities to improve CTR on high-impression pages, which could result in substantial traffic gains.`,
     performance: {
       trend: "up",
-      details: "Overall impressions increased by 15% while clicks increased by 22%, indicating improving engagement."
+      changePercent: "15%",
+      timePeriod: period,
+      keyMetricChanges: [
+        {metric: "clicks", change: "+22%", interpretation: "Strong growth indicating improved visibility and relevance"},
+        {metric: "impressions", change: "+15%", interpretation: "Expanded reach in search results"},
+        {metric: "ctr", change: "+8%", interpretation: "Better engagement with search snippets"},
+        {metric: "position", change: "-0.7", interpretation: "Improved average ranking positions"}
+      ],
+      details: "Overall impressions increased by 15% while clicks increased by 22%, indicating improving engagement. CTR improvements suggest your title tags and meta descriptions are becoming more effective."
     },
     topFindings: [
       {
         title: "Increased Mobile Traffic",
-        description: "Mobile traffic has increased by 27% compared to the previous period, suggesting your site is performing well on mobile devices."
+        description: "Mobile traffic has increased by 27% compared to the previous period, suggesting your site is performing well on mobile devices.",
+        impactLevel: "high",
+        dataPoints: ["Mobile clicks: +27%", "Mobile CTR: +12%", "Core Web Vitals all in 'good' range"]
       },
       {
         title: "Strong Performance for Key Terms",
-        description: "Your site ranks in top 5 positions for several important keywords, with good CTR for most."
+        description: "Your site ranks in top 5 positions for several important keywords, with good CTR for most.",
+        impactLevel: "high",
+        dataPoints: ["5 keywords in positions 1-3", "Average CTR for top terms: 15.8%"]
       },
       {
         title: "Product Pages Underperforming",
-        description: "Several product pages have high impressions but low CTR, indicating potential issues with meta descriptions or title tags."
+        description: "Several product pages have high impressions but low CTR (below 2%), indicating potential issues with meta descriptions or title tags.",
+        impactLevel: "medium",
+        dataPoints: ["Product pages avg CTR: 1.8%", "Category pages avg CTR: 4.5%"]
+      }
+    ],
+    opportunities: [
+      {
+        title: "Improve Product Page CTR",
+        description: "Several product pages show high impression counts but CTR below 2%. Optimizing titles and descriptions could significantly increase traffic.",
+        estimatedImpact: "+15-20% clicks to product pages",
+        difficulty: "easy",
+        timeFrame: "short-term"
+      },
+      {
+        title: "Target Featured Snippets",
+        description: "For 3 high-volume keywords, your content ranks on page 1 but isn't capturing featured snippets.",
+        estimatedImpact: "+30-40% CTR for those terms",
+        difficulty: "moderate",
+        timeFrame: "medium-term"
+      },
+      {
+        title: "Mobile Page Speed Optimization",
+        description: "While mobile traffic is increasing, FID metrics could be improved to further enhance mobile experience.",
+        estimatedImpact: "+5-8% conversion rate",
+        difficulty: "complex",
+        timeFrame: "long-term"
       }
     ],
     recommendations: [
       {
         title: "Optimize Product Page Metadata",
         description: "Revise title tags and meta descriptions for product pages to improve CTR from search results.",
-        priority: "high"
+        priority: "high",
+        expectedOutcome: "10-15% increase in product page traffic",
+        implementationSteps: [
+          "Audit current product page titles and meta descriptions",
+          "Incorporate pricing and USPs in meta descriptions",
+          "Add action words in titles",
+          "Implement and monitor for 2 weeks"
+        ]
       },
       {
         title: "Create Content for Rising Keywords",
         description: "Develop new content targeting keywords that are showing increasing search volume in your niche.",
-        priority: "medium"
+        priority: "medium",
+        expectedOutcome: "Capture early traffic from trending topics",
+        implementationSteps: [
+          "Focus on keywords: 'sustainable products', 'eco-friendly alternatives'",
+          "Create comprehensive guides for each topic",
+          "Interlink with relevant product pages"
+        ]
       },
       {
         title: "Improve Page Load Speed",
         description: "Several key landing pages could benefit from performance optimization to improve Core Web Vitals metrics.",
-        priority: "medium"
+        priority: "medium",
+        expectedOutcome: "Improved user experience and potential ranking boost",
+        implementationSteps: [
+          "Optimize image sizes and formats",
+          "Implement lazy loading",
+          "Minimize render-blocking resources"
+        ]
       }
-    ]
+    ],
+    keywordInsights: {
+      risingKeywords: ["sustainable products", "eco-friendly alternatives", "organic materials"],
+      decliningKeywords: ["cheap products", "discount items", "low-cost alternatives"],
+      missedOpportunities: ["product comparison", "best alternatives to", "how to choose"],
+      analysis: "There's a clear shift towards sustainability and quality in search behavior. Users are less focused on price and more interested in environmental impact and product quality."
+    }
   };
 }
 
