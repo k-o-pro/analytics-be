@@ -211,7 +211,7 @@ export async function generateInsights(request, env) {
       // Log the actual request being sent
       console.log('OpenAI API request:', {
         url: env.OPENAI_API_URL,
-        model: "gpt-4o", // Update logging to show the new model
+        model: "gpt-4o-2024-08-06", // Update logging to show the new model
         promptFirstChars: prompt.substring(0, 50),
         hasValidApiKey: !!env.OPENAI_API_KEY
       });
@@ -242,7 +242,7 @@ export async function generateInsights(request, env) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            model: "gpt-4o", // Changed from gpt-3.5-turbo to the more advanced GPT-4o model
+            model: "gpt-4o-2024-08-06", // Changed from gpt-3.5-turbo to the more advanced GPT-4o model
             messages: [
               { 
                 role: "system", 
