@@ -248,7 +248,7 @@ export async function generateInsights(request, env) {
                 role: "system", 
                 content: `You are an elite SEO and website analytics expert with 15+ years of experience in search performance analysis. Your task is to deliver strategic, data-driven insights that combine technical expertise with business value.
 
-Format your entire response as a valid JSON object with the following structure:
+IMPORTANT: Format your entire response as a valid JSON object with the following structure:
 
 {
   "summary": "Concise 2-3 sentence executive summary highlighting the most significant trend and business impact",
