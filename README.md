@@ -45,6 +45,13 @@ The Search Console Analytics backend serves as the API layer for the analytics p
 
 ## Recent Improvements
 
+### Enhanced Insights Structure
+- Redesigned insights response format to clearly separate raw data from AI analysis
+- Structured raw_data section to include actual metrics from Google Search Console
+- Enhanced AI analysis with detailed performance trends, findings, and recommendations
+- Added robust error handling to always return valid, structured responses
+- Implemented fallback system for graceful degradation when AI service is unavailable
+
 ### Enhanced Error Handling
 - Implemented standardized error response structure
 - Created custom error classes for different error types

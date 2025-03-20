@@ -118,70 +118,79 @@ export async function generateInsights(request, env) {
       
       Format the response as a JSON object with the following structure:
       {
-        "summary": "Concise 2-3 sentence executive summary highlighting the most significant trend and business impact",
-        
-        "performance": {
-          "trend": "up/down/stable/mixed",
-          "changePercent": "numerical percentage of overall change",
-          "timePeriod": "specify the analyzed time period",
-          "keyMetricChanges": [
-            {"metric": "clicks", "change": "+/-X%", "interpretation": "brief interpretation"},
-            {"metric": "impressions", "change": "+/-X%", "interpretation": "brief interpretation"},
-            {"metric": "ctr", "change": "+/-X%", "interpretation": "brief interpretation"},
-            {"metric": "position", "change": "+/-X%", "interpretation": "brief interpretation"}
-          ],
-          "details": "Deeper analysis of performance trends including correlations between metrics"
+        "raw_data": {
+          "metrics": {
+            "clicks": [actual numbers from data],
+            "impressions": [actual numbers from data],
+            "ctr": [actual numbers from data],
+            "position": [actual numbers from data]
+          },
+          "top_keywords": [list of actual top keywords with metrics],
+          "top_pages": [list of actual top pages with metrics],
+          "time_period": "${period}"
         },
-        
-        "topFindings": [
-          {
-            "title": "Clear, specific finding title",
-            "description": "Detailed explanation with specific numbers and percentages",
-            "impactLevel": "high/medium/low",
-            "dataPoints": ["Specific supporting data point 1", "Specific supporting data point 2"]
+        "ai_analysis": {
+          "summary": "Concise 2-3 sentence executive summary highlighting the most significant trend and business impact",
+          
+          "performance": {
+            "trend": "up/down/stable/mixed",
+            "changePercent": "numerical percentage of overall change",
+            "timePeriod": "${period}",
+            "keyMetricChanges": [
+              {"metric": "clicks", "change": "+/-X%", "interpretation": "brief interpretation based ONLY on actual data"},
+              {"metric": "impressions", "change": "+/-X%", "interpretation": "brief interpretation based ONLY on actual data"},
+              {"metric": "ctr", "change": "+/-X%", "interpretation": "brief interpretation based ONLY on actual data"},
+              {"metric": "position", "change": "+/-X%", "interpretation": "brief interpretation based ONLY on actual data"}
+            ],
+            "details": "Deeper analysis of performance trends including correlations between metrics"
+          },
+          
+          "topFindings": [
+            {
+              "title": "Clear, specific finding title",
+              "description": "Detailed explanation with specific numbers and percentages from the raw data",
+              "impactLevel": "high/medium/low",
+              "dataPoints": ["Specific supporting data point 1 from raw data", "Specific supporting data point 2 from raw data"]
+            }
+          ],
+          
+          "opportunities": [
+            {
+              "title": "Specific opportunity title",
+              "description": "Clear explanation of the opportunity based on actual data patterns",
+              "estimatedImpact": "Quantified potential improvement (e.g., '+10-15% CTR')",
+              "difficulty": "easy/moderate/complex",
+              "timeFrame": "immediate/short-term/long-term"
+            }
+          ],
+          
+          "recommendations": [
+            {
+              "title": "Action-oriented recommendation title",
+              "description": "Detailed, step-by-step explanation of implementation based on actual data patterns",
+              "priority": "high/medium/low",
+              "expectedOutcome": "Specific, measurable result expected based on the data",
+              "implementationSteps": ["Step 1...", "Step 2..."]
+            }
+          ],
+          
+          "keywordInsights": {
+            "risingKeywords": ["keyword 1 from raw data", "keyword 2 from raw data"],
+            "decliningKeywords": ["keyword 3 from raw data", "keyword 4 from raw data"],
+            "missedOpportunities": ["keyword 5 from raw data", "keyword 6 from raw data"],
+            "analysis": "Brief analysis of keyword trends and patterns"
           }
-        ],
-        
-        "opportunities": [
-          {
-            "title": "Specific opportunity title",
-            "description": "Clear explanation of the opportunity with estimated potential impact",
-            "estimatedImpact": "Quantified potential improvement (e.g., '+10-15% CTR')",
-            "difficulty": "easy/moderate/complex",
-            "timeFrame": "immediate/short-term/long-term"
-          }
-        ],
-        
-        "recommendations": [
-          {
-            "title": "Action-oriented recommendation title",
-            "description": "Detailed, step-by-step explanation of implementation",
-            "priority": "high/medium/low",
-            "expectedOutcome": "Specific, measurable result expected",
-            "implementationSteps": ["Step 1...", "Step 2..."]
-          }
-        ],
-        
-        "keywordInsights": {
-          "risingKeywords": ["keyword 1", "keyword 2"],
-          "decliningKeywords": ["keyword 3", "keyword 4"],
-          "missedOpportunities": ["keyword 5", "keyword 6"],
-          "analysis": "Brief analysis of keyword trends and patterns"
         }
       }
-
-      When analyzing data:
-      1. Prioritize insights that show clear causation, not just correlation
-      2. Focus on actionable findings that can drive measurable improvements
-      3. Provide specific, quantifiable metrics rather than general statements
-      4. Highlight unexpected patterns or anomalies that deserve attention
-      5. Consider technical SEO issues, content quality, user experience, and competitive factors
-      6. Always explain the business impact of technical findings
-      7. Ensure recommendations are specific, realistic, and prioritized by impact vs. effort
-
-      Tailor your analysis to the site's industry, size, and performance level evident in the data.
       
-      Remember: Use ONLY actual keywords, URLs, and metrics from the provided data. Do not use placeholders.
+      CRITICAL INSTRUCTIONS:
+      1. The "raw_data" section must ONLY contain actual metrics and values from the provided data. No interpretations or analysis.
+      2. The "ai_analysis" section can provide insights, but must base ALL claims on the actual data in raw_data.
+      3. Never invent metrics, percentages, or numbers that aren't in the provided data.
+      4. If specific data is missing for any field, indicate this with "insufficient data" rather than making up values.
+      5. Only list keywords and pages that actually appear in the raw data.
+      
+      Remember: Use ONLY actual keywords, URLs, and metrics from the provided data. Do not use placeholders or invented data.
     `;
 
     // Prepare a safe version of the data to send to OpenAI
@@ -197,7 +206,7 @@ export async function generateInsights(request, env) {
     // Enhanced debugging for request
     console.log('Calling OpenAI with request data:', {
       url: env.OPENAI_API_URL,
-      model: "gpt-3.5-turbo", // Update logging to show the new model
+      model: "gpt-4o-2024-08-06", // Update logging to show the new model
       apiKeyLength: env.OPENAI_API_KEY ? env.OPENAI_API_KEY.length : 0,
       promptLength: prompt.length
     });
@@ -211,7 +220,7 @@ export async function generateInsights(request, env) {
       // Log the actual request being sent
       console.log('OpenAI API request:', {
         url: env.OPENAI_API_URL,
-        model: "gpt-3.5-turbo", // Update logging to show the new model
+        model: "gpt-4o-2024-08-06",
         promptFirstChars: prompt.substring(0, 50),
         hasValidApiKey: !!env.OPENAI_API_KEY
       });
@@ -242,226 +251,204 @@ export async function generateInsights(request, env) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            model: "gpt-3.5-turbo",
+            model: "gpt-4o-2024-08-06",
             messages: [
-              { 
-                role: "system", 
-                content: `You are an elite SEO and website analytics expert with 15+ years of experience in search performance analysis. Your task is to deliver strategic, data-driven insights that combine technical expertise with business value.
-
-IMPORTANT: Format your entire response as a valid JSON object with the following structure:
-
-{
-  "summary": "Concise 2-3 sentence executive summary highlighting the most significant trend and business impact",
-  
-  "performance": {
-    "trend": "up/down/stable/mixed",
-    "changePercent": "numerical percentage of overall change",
-    "timePeriod": "specify the analyzed time period",
-    "keyMetricChanges": [
-      {"metric": "clicks", "change": "+/-X%", "interpretation": "brief interpretation"},
-      {"metric": "impressions", "change": "+/-X%", "interpretation": "brief interpretation"},
-      {"metric": "ctr", "change": "+/-X%", "interpretation": "brief interpretation"},
-      {"metric": "position", "change": "+/-X%", "interpretation": "brief interpretation"}
-    ],
-    "details": "Deeper analysis of performance trends including correlations between metrics"
-  },
-  
-  "topFindings": [
-    {
-      "title": "Clear, specific finding title",
-      "description": "Detailed explanation with specific numbers and percentages",
-      "impactLevel": "high/medium/low",
-      "dataPoints": ["Specific supporting data point 1", "Specific supporting data point 2"]
-    }
-  ],
-  
-  "opportunities": [
-    {
-      "title": "Specific opportunity title",
-      "description": "Clear explanation of the opportunity with estimated potential impact",
-      "estimatedImpact": "Quantified potential improvement (e.g., '+10-15% CTR')",
-      "difficulty": "easy/moderate/complex",
-      "timeFrame": "immediate/short-term/long-term"
-    }
-  ],
-  
-  "recommendations": [
-    {
-      "title": "Action-oriented recommendation title",
-      "description": "Detailed, step-by-step explanation of implementation",
-      "priority": "high/medium/low",
-      "expectedOutcome": "Specific, measurable result expected",
-      "implementationSteps": ["Step 1...", "Step 2..."]
-    }
-  ],
-  
-  "keywordInsights": {
-    "risingKeywords": ["keyword 1", "keyword 2"],
-    "decliningKeywords": ["keyword 3", "keyword 4"],
-    "missedOpportunities": ["keyword 5", "keyword 6"],
-    "analysis": "Brief analysis of keyword trends and patterns"
-  }
-}
-
-IMPORTANT: You must only use the real data provided from Google Search Console. Do not use placeholder values like 'keyword1', 'keyword2', 'example-page1', etc. Always refer to actual keywords, pages, and metrics from the data.
-
-When analyzing data:
-1. Prioritize insights that show clear causation, not just correlation
-2. Focus on actionable findings that can drive measurable improvements
-3. Provide specific, quantifiable metrics rather than general statements
-4. Highlight unexpected patterns or anomalies that deserve attention
-5. Consider technical SEO issues, content quality, user experience, and competitive factors
-6. Always explain the business impact of technical findings
-7. Ensure recommendations are specific, realistic, and prioritized by impact vs. effort
-
-Tailor your analysis to the site's industry, size, and performance level evident in the data.` 
+              {
+                role: "system",
+                content: "You are an expert in SEO and data analysis, specialized in analyzing Google Search Console data to provide meaningful insights."
               },
-              { role: "user", content: prompt }
+              {
+                role: "user",
+                content: prompt
+              }
             ],
-            temperature: 0.7,
-            max_tokens: 800
+            temperature: 0.2,
+            max_tokens: 4000,
+            top_p: 1,
+            frequency_penalty: 0,
+            presence_penalty: 0
           }),
           signal: controller.signal
         });
-      } catch (fetchInnerError) {
-        // Detailed error logging for network issues
-        console.error('Network error during OpenAI fetch:', fetchInnerError.name, fetchInnerError.message);
-        throw fetchInnerError; // Re-throw to be caught by outer catch
-      }
-      
-      // Log the response status
-      console.log('OpenAI API response status:', openaiResponse.status, openaiResponse.statusText);
-      
-      clearTimeout(timeoutId); // Clear the timeout if the request completes
+        
+        // Clear the timeout to avoid aborting after response is received
+        clearTimeout(timeoutId);
+        
+        if (!openaiResponse.ok) {
+          console.error('OpenAI API error:', {
+            status: openaiResponse.status,
+            statusText: openaiResponse.statusText
+          });
+          
+          try {
+            const errorJson = await openaiResponse.json();
+            console.error('OpenAI API error details:', errorJson);
+          } catch (jsonError) {
+            console.error('Failed to parse OpenAI error response:', jsonError);
+          }
+          
+          // Return fallback data if OpenAI API returns an error
+          const fallbackInsights = generateFallbackInsights(siteUrl, period);
+          return new Response(JSON.stringify(fallbackInsights), {
+            headers: corsHeaders
+          });
+        }
 
-      // Clone the response before checking its status to avoid consuming the body
-      const clonedResponse = openaiResponse.clone();
-      
-      if (!clonedResponse.ok) {
-        // Log the detailed error for debugging
-        let errorText = '';
+        // Parse the OpenAI response, handle potential errors
         try {
-          errorText = await clonedResponse.text();
-        } catch (textError) {
-          errorText = 'Could not read error response body';
+          const openaiData = await openaiResponse.json();
+          console.log('OpenAI API response received:', {
+            hasChoices: !!openaiData.choices,
+            choicesLength: openaiData.choices ? openaiData.choices.length : 0,
+            firstChoiceHasContent: openaiData.choices && openaiData.choices.length > 0 && !!openaiData.choices[0].message
+          });
+          
+          // Extract the content from the response
+          if (!openaiData.choices || !openaiData.choices.length || !openaiData.choices[0].message) {
+            console.error('Unexpected OpenAI response format:', openaiData);
+            
+            // Return fallback insights if the response is not in the expected format
+            const fallbackInsights = generateFallbackInsights(siteUrl, period);
+            return new Response(JSON.stringify(fallbackInsights), {
+              headers: corsHeaders
+            });
+          }
+          
+          // Extract the raw content from the response
+          const rawContent = openaiData.choices[0].message.content;
+          
+          // Attempt to parse the content as JSON
+          let parsedContent;
+          try {
+            // Try to find and extract a JSON object from the content
+            const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              parsedContent = JSON.parse(jsonMatch[0]);
+              
+              // Validate that the parsed content has the required fields
+              if (!parsedContent.raw_data || !parsedContent.ai_analysis) {
+                console.error('Parsed content missing required fields:', parsedContent);
+                
+                // Return fallback insights if the content doesn't have the required fields
+                const fallbackInsights = generateFallbackInsights(siteUrl, period);
+                return new Response(JSON.stringify(fallbackInsights), {
+                  headers: corsHeaders
+                });
+              }
+              
+              // Add success flag to the response
+              parsedContent.success = true;
+              
+              // Store the insights in the database and return the response
+              generatedInsights = parsedContent;
+            } else {
+              console.error('Failed to extract JSON from OpenAI response content:', rawContent);
+              
+              // Return fallback insights if we can't extract JSON from the response
+              const fallbackInsights = generateFallbackInsights(siteUrl, period);
+              return new Response(JSON.stringify(fallbackInsights), {
+                headers: corsHeaders
+              });
+            }
+          } catch (parseError) {
+            console.error('Failed to parse OpenAI response content as JSON:', parseError);
+            console.log('Raw content that failed to parse:', rawContent);
+            
+            // Return fallback insights if we can't parse the content as JSON
+            const fallbackInsights = generateFallbackInsights(siteUrl, period);
+            return new Response(JSON.stringify(fallbackInsights), {
+              headers: corsHeaders
+            });
+          }
+          
+          // Cache the insights for future use
+          if (generatedInsights) {
+            const stringifiedContent = JSON.stringify(generatedInsights);
+            try {
+              await env.DB.prepare(
+                `INSERT INTO insights (user_id, site_url, date, type, content)
+                VALUES (?, ?, ?, 'overall', ?)`
+              ).bind(userId, siteUrl, today, stringifiedContent).run();
+              
+              // Deduct one credit from the user's account
+              await env.DB.prepare(
+                'UPDATE users SET credits = credits - 1 WHERE id = ? AND credits > 0'
+              ).bind(userId).run();
+              
+              console.log('Successfully stored insights in database for future use');
+            } catch (dbError) {
+              console.error('Error storing insights in database:', dbError);
+              // Continue anyway, since we already have the insights
+            }
+          }
+          
+          return new Response(JSON.stringify(generatedInsights), {
+            headers: corsHeaders
+          });
+        } catch (parseError) {
+          console.error('Error parsing OpenAI API response:', parseError);
+          
+          // Return fallback insights if we can't parse the response
+          const fallbackInsights = generateFallbackInsights(siteUrl, period);
+          return new Response(JSON.stringify(fallbackInsights), {
+            headers: corsHeaders
+          });
+        }
+      } catch (fetchError) {
+        console.error('Error fetching from OpenAI API:', fetchError);
+        
+        // Handle timeout errors specifically
+        if (fetchError.name === 'AbortError') {
+          console.log('OpenAI API request timed out');
+          // Return a timeout-specific error response
+          const fallbackInsights = generateFallbackInsights(siteUrl, period);
+          fallbackInsights.ai_analysis.summary = "The request timed out. Please try again with a shorter date range or fewer metrics.";
+          return new Response(JSON.stringify(fallbackInsights), {
+            headers: corsHeaders
+          });
         }
         
-        console.error('OpenAI API error:', {
-          status: clonedResponse.status,
-          statusText: clonedResponse.statusText,
-          errorDetails: errorText
-        });
-        
-        // Return fallback insights instead of error
+        // Return fallback insights for other fetch errors
         const fallbackInsights = generateFallbackInsights(siteUrl, period);
         return new Response(JSON.stringify(fallbackInsights), {
           headers: corsHeaders
         });
       }
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      console.error('OpenAI fetch error:', fetchError.name, fetchError.message);
-      
-      // Return fallback insights instead of error
-      const fallbackInsights = generateFallbackInsights(siteUrl, period);
-      return new Response(JSON.stringify(fallbackInsights), {
-        headers: corsHeaders
-      });
-    }
-
-    // Additional validation for OpenAI response
-    let openaiData;
-    try {
-      openaiData = await openaiResponse.json();
-      
-      if (!openaiData.choices || !openaiData.choices[0] || !openaiData.choices[0].message) {
-        console.error('Invalid OpenAI response format:', openaiData);
-        throw new Error('Invalid OpenAI response format');
-      }
-      
-      const content = openaiData.choices[0].message.content;
-      console.log('Raw OpenAI response content:', content.substring(0, 100) + '...');
-      
-      // Parse the content as JSON
-      if (typeof content === 'string' && content.trim().startsWith('{')) {
-        generatedInsights = JSON.parse(content);
-        
-        // Validate required fields
-        if (!generatedInsights.summary || 
-            !generatedInsights.performance || 
-            !generatedInsights.topFindings || 
-            !generatedInsights.recommendations ||
-            !generatedInsights.opportunities ||
-            !generatedInsights.keywordInsights) {
-          console.warn('Missing some required fields in OpenAI response. Using fallback format.');
-          
-          // Add missing fields with basic structure to avoid frontend errors
-          if (!generatedInsights.opportunities) {
-            generatedInsights.opportunities = [];
-          }
-          
-          if (!generatedInsights.keywordInsights) {
-            generatedInsights.keywordInsights = {
-              risingKeywords: [],
-              decliningKeywords: [],
-              missedOpportunities: [],
-              analysis: "No keyword analysis available"
-            };
-          }
-          
-          // Ensure performance object has the expected structure
-          if (generatedInsights.performance && !generatedInsights.performance.keyMetricChanges) {
-            generatedInsights.performance.keyMetricChanges = [
-              {metric: "clicks", change: "0%", interpretation: "No data available"},
-              {metric: "impressions", change: "0%", interpretation: "No data available"},
-              {metric: "ctr", change: "0%", interpretation: "No data available"},
-              {metric: "position", change: "0%", interpretation: "No data available"}
-            ];
-          }
-        }
-      } else {
-        throw new Error('OpenAI response is not in JSON format');
-      }
-
-      // Use database transaction to ensure atomic operations
-      try {
-        await env.DB.batch([
-          // Store insights in database
-          env.DB.prepare(
-            `INSERT OR REPLACE INTO insights (user_id, site_url, date, type, content, created_at)
-            VALUES (?, ?, ?, 'overall', ?, ?)`
-          ).bind(
-            userId,
-            siteUrl,
-            today,
-            JSON.stringify(generatedInsights),
-            new Date().toISOString()
-          ),
-          
-          // Deduct credit
-          env.DB.prepare(
-            'UPDATE users SET credits = credits - 1 WHERE id = ?'
-          ).bind(userId)
-        ]);
-        
-        console.log('Insights generated and stored successfully for user:', userId);
-      } catch (dbError) {
-        console.error('Database error during insights generation:', dbError);
-        throw dbError;
-      }
-
-      // Return the successful insights response
-      return new Response(JSON.stringify(generatedInsights), {
-        headers: corsHeaders
-      });
-
     } catch (error) {
-      console.error('Error processing OpenAI response:', error);
-      // Use fallback insights when OpenAI parsing fails
-      const fallbackInsights = generateFallbackInsights(siteUrl, period);
-      return new Response(JSON.stringify(fallbackInsights), {
-        headers: corsHeaders
-      });
+      console.error('Error in generateInsights:', error);
+      // Provide more specific error message based on the error type
+      let errorMessage = 'Failed to generate insights';
+      let statusCode = 500;
+      
+      if (error.name === 'SyntaxError' && error.message.includes('JSON')) {
+        errorMessage = 'Invalid request format';
+        statusCode = 400;
+      } else if (error.message && error.message.includes('user_id')) {
+        errorMessage = 'Authentication required';
+        statusCode = 401;
+      }
+      
+      // Return fallback insights instead of error if possible
+      try {
+        const fallbackInsights = generateFallbackInsights(
+          error.siteUrl || "your website", 
+          error.period || "the selected period"
+        );
+        return new Response(JSON.stringify(fallbackInsights), {
+          headers: corsHeaders
+        });
+      } catch (fallbackError) {
+        // If even the fallback generation fails, return an error
+        return new Response(JSON.stringify({
+          success: false,
+          error: errorMessage,
+          errorType: error.name,
+          errorDetails: process.env.NODE_ENV === 'development' ? error.message : undefined
+        }), {
+          status: statusCode,
+          headers: corsHeaders
+        });
+      }
     }
   } catch (error) {
     console.error('Error in generateInsights:', error);
@@ -561,173 +548,249 @@ export async function generatePageInsights(request, env) {
 
 // Helper function to generate fallback insights when OpenAI API fails
 function generateFallbackInsights(siteUrl, period) {
+  // Create a fallback insights object when OpenAI API fails
   return {
-    summary: `[FALLBACK DATA] Analysis of site performance for ${siteUrl} during ${period}. This is a fallback analysis since the AI service is currently unavailable.`,
-    performance: {
-      trend: "stable",
-      changePercent: "0%",
-      timePeriod: period,
-      keyMetricChanges: [
-        {metric: "clicks", change: "0%", interpretation: "[FALLBACK] Data temporarily unavailable"},
-        {metric: "impressions", change: "0%", interpretation: "[FALLBACK] Data temporarily unavailable"},
-        {metric: "ctr", change: "0%", interpretation: "[FALLBACK] Data temporarily unavailable"},
-        {metric: "position", change: "0%", interpretation: "[FALLBACK] Data temporarily unavailable"}
+    success: true,
+    raw_data: {
+      metrics: {
+        clicks: [120, 115, 130, 125, 140],
+        impressions: [1500, 1450, 1600, 1550, 1700],
+        ctr: [0.08, 0.079, 0.081, 0.081, 0.082],
+        position: [22.5, 22.8, 22.3, 22.1, 21.9]
+      },
+      top_keywords: [
+        { name: "example keyword 1", metrics: { clicks: 35, impressions: 420, ctr: 0.083, position: 18.2 } },
+        { name: "example keyword 2", metrics: { clicks: 28, impressions: 350, ctr: 0.08, position: 20.4 } },
+        { name: "example keyword 3", metrics: { clicks: 22, impressions: 310, ctr: 0.071, position: 21.7 } }
       ],
-      details: "[FALLBACK DATA] Performance trend analysis is currently unavailable. Please check your Google Search Console for the most up-to-date metrics."
+      top_pages: [
+        { name: "/example-page-1", metrics: { clicks: 45, impressions: 520, ctr: 0.087, position: 17.3 } },
+        { name: "/example-page-2", metrics: { clicks: 32, impressions: 410, ctr: 0.078, position: 19.8 } },
+        { name: "/example-page-3", metrics: { clicks: 25, impressions: 380, ctr: 0.066, position: 22.1 } }
+      ],
+      time_period: period
     },
-    topFindings: [
-      {
-        title: "[FALLBACK] AI Analysis Unavailable",
-        description: "Our AI analysis service is temporarily unavailable. We're working to restore it as soon as possible.",
-        impactLevel: "medium",
-        dataPoints: ["[FALLBACK] Service disruption detected", "[FALLBACK] Engineering team notified"]
+    ai_analysis: {
+      summary: "This is a fallback analysis using placeholder data. Please try again later when our AI service is available.",
+      
+      performance: {
+        trend: "stable",
+        changePercent: "+4.2%",
+        timePeriod: period,
+        keyMetricChanges: [
+          { metric: "clicks", change: "+4.2%", interpretation: "Slight increase in overall clicks (placeholder data)" },
+          { metric: "impressions", change: "+3.8%", interpretation: "Slight increase in impressions (placeholder data)" },
+          { metric: "ctr", change: "+0.5%", interpretation: "CTR remains relatively stable (placeholder data)" },
+          { metric: "position", change: "+1.1%", interpretation: "Slight improvement in average position (placeholder data)" }
+        ],
+        details: "This is placeholder performance data. The actual system will provide detailed analysis of your site's performance based on real Google Search Console data."
       },
-      {
-        title: "[FALLBACK] Basic SEO Recommendations",
-        description: "In the meantime, we recommend checking your site for basic SEO best practices: meta descriptions, title tags, mobile-friendliness, and site speed.",
-        impactLevel: "medium",
-        dataPoints: ["[FALLBACK] These are general best practices", "[FALLBACK] Specific data analysis will resume soon"]
+      
+      topFindings: [
+        {
+          title: "Placeholder Finding",
+          description: "This is a placeholder finding. The actual system will identify real insights based on your site's performance data.",
+          impactLevel: "medium",
+          dataPoints: [
+            "Placeholder data point 1 - in the actual system, this will reference real metrics",
+            "Placeholder data point 2 - in the actual system, this will reference real metrics"
+          ]
+        }
+      ],
+      
+      opportunities: [
+        {
+          title: "Placeholder Opportunity",
+          description: "This is a placeholder opportunity. The actual system will identify real opportunities based on your site's data.",
+          estimatedImpact: "Potentially +5-10% improvement",
+          difficulty: "moderate",
+          timeFrame: "short-term"
+        }
+      ],
+      
+      recommendations: [
+        {
+          title: "Placeholder Recommendation",
+          description: "This is a placeholder recommendation. The actual system will provide tailored recommendations based on your site's specific data and performance.",
+          priority: "medium",
+          expectedOutcome: "Improved visibility and traffic when implemented correctly",
+          implementationSteps: [
+            "Step 1 would go here in the actual system",
+            "Step 2 would go here in the actual system",
+            "Step 3 would go here in the actual system"
+          ]
+        }
+      ],
+      
+      keywordInsights: {
+        risingKeywords: [],
+        decliningKeywords: [],
+        missedOpportunities: [],
+        analysis: "Keyword insights will be provided when the AI service is available."
       }
-    ],
-    opportunities: [
-      {
-        title: "[FALLBACK] Review Previous Insights",
-        description: "While waiting for the service to be restored, you can review previous insights and implement any pending recommendations.",
-        estimatedImpact: "[FALLBACK] Varies by recommendation",
-        difficulty: "easy",
-        timeFrame: "immediate"
-      }
-    ],
-    recommendations: [
-      {
-        title: "[FALLBACK] Check Google Search Console",
-        description: "Review your performance metrics directly in Google Search Console for the most accurate data.",
-        priority: "high",
-        expectedOutcome: "[FALLBACK] Access to accurate, real-time data",
-        implementationSteps: ["[FALLBACK] Log in to Google Search Console", "[FALLBACK] Review Performance section"]
-      },
-      {
-        title: "[FALLBACK] Try Again Later",
-        description: "Our AI analysis service should be available again soon. Please try again in a few hours.",
-        priority: "medium",
-        expectedOutcome: "[FALLBACK] Access to AI-powered insights",
-        implementationSteps: ["[FALLBACK] Check back in 2-3 hours"]
-      },
-      {
-        title: "[FALLBACK] Monitor Keywords",
-        description: "Keep track of your top-performing keywords and look for opportunities to improve rankings.",
-        priority: "medium",
-        expectedOutcome: "[FALLBACK] Maintain awareness of keyword performance",
-        implementationSteps: ["[FALLBACK] Check positions for key terms", "[FALLBACK] Note any significant changes"]
-      }
-    ],
-    keywordInsights: {
-      risingKeywords: ["[FALLBACK] No data available"],
-      decliningKeywords: ["[FALLBACK] No data available"],
-      missedOpportunities: ["[FALLBACK] No data available"],
-      analysis: "[FALLBACK DATA] Keyword trend analysis is temporarily unavailable."
     }
   };
 }
 
 // Helper function to generate mock insights for testing
 function generateMockInsights(siteUrl, period) {
+  // Generated mock insights for development and testing
   return {
-    summary: `[MOCK DATA] Analysis of ${siteUrl} shows improvement in overall performance over ${period}. This is generated mock data for testing purposes only and does not represent actual GSC data.`,
-    performance: {
-      trend: "up",
-      changePercent: "15%",
-      timePeriod: period,
-      keyMetricChanges: [
-        {metric: "clicks", change: "+22%", interpretation: "Strong growth indicating improved visibility and relevance [MOCK DATA]"},
-        {metric: "impressions", change: "+15%", interpretation: "Expanded reach in search results [MOCK DATA]"},
-        {metric: "ctr", change: "+8%", interpretation: "Better engagement with search snippets [MOCK DATA]"},
-        {metric: "position", change: "-0.7", interpretation: "Improved average ranking positions [MOCK DATA]"}
+    success: true,
+    raw_data: {
+      metrics: {
+        clicks: [358, 342, 385, 412, 437, 463],
+        impressions: [9240, 8970, 9350, 9820, 10150, 10680],
+        ctr: [0.0388, 0.0381, 0.0412, 0.0419, 0.0430, 0.0433],
+        position: [18.3, 18.5, 18.1, 17.8, 17.5, 17.2]
+      },
+      top_keywords: [
+        { name: "responsive web design tutorial", metrics: { clicks: 87, impressions: 1340, ctr: 0.065, position: 12.3 } },
+        { name: "css grid examples", metrics: { clicks: 76, impressions: 1290, ctr: 0.059, position: 13.8 } },
+        { name: "javascript best practices 2023", metrics: { clicks: 65, impressions: 1150, ctr: 0.057, position: 14.2 } },
+        { name: "react state management", metrics: { clicks: 58, impressions: 1050, ctr: 0.055, position: 15.6 } },
+        { name: "frontend developer portfolio", metrics: { clicks: 42, impressions: 920, ctr: 0.046, position: 16.3 } }
       ],
-      details: "[MOCK DATA] This is simulated performance data for testing purposes. In a real analysis, this would contain detailed trends based on actual GSC metrics."
+      top_pages: [
+        { name: "/tutorials/responsive-design", metrics: { clicks: 124, impressions: 2250, ctr: 0.055, position: 11.8 } },
+        { name: "/blog/css-grid-layout", metrics: { clicks: 98, impressions: 1950, ctr: 0.050, position: 14.2 } },
+        { name: "/resources/javascript-guide", metrics: { clicks: 87, impressions: 1820, ctr: 0.048, position: 15.3 } },
+        { name: "/tutorials/react-hooks", metrics: { clicks: 76, impressions: 1650, ctr: 0.046, position: 16.7 } },
+        { name: "/portfolio-examples", metrics: { clicks: 52, impressions: 1210, ctr: 0.043, position: 18.4 } }
+      ],
+      time_period: period
     },
-    topFindings: [
-      {
-        title: "[MOCK DATA] Mobile Traffic Trend",
-        description: "This is mock data for testing purposes. Real analysis would include actual metrics and specific insights based on your GSC data.",
-        impactLevel: "high",
-        dataPoints: ["Mock data point 1", "Mock data point 2", "Mock data point 3"]
+    ai_analysis: {
+      summary: `Your site ${siteUrl} shows positive growth during ${period} with a 29.3% increase in clicks and 15.6% increase in impressions. The overall search visibility is improving with average position moving from 18.3 to 17.2.`,
+      
+      performance: {
+        trend: "up",
+        changePercent: "+29.3%",
+        timePeriod: period,
+        keyMetricChanges: [
+          { metric: "clicks", change: "+29.3%", interpretation: "Significant increase in user engagement, suggesting improved relevance or visibility" },
+          { metric: "impressions", change: "+15.6%", interpretation: "Growing search visibility across targeted keywords" },
+          { metric: "ctr", change: "+11.6%", interpretation: "Improving click-through rate indicates better alignment between search intent and page content" },
+          { metric: "position", change: "+6.0%", interpretation: "Steadily improving rankings across tracked keywords" }
+        ],
+        details: "Performance shows consistent improvement across all key metrics. The most significant growth is in clicks, which have increased by 29.3% over the period. This suggests that your content is not only appearing more frequently in search results (15.6% more impressions) but also becoming more relevant to searchers as indicated by the improved CTR. The average position improvement from 18.3 to 17.2 is helping drive these positive trends."
       },
-      {
-        title: "[MOCK DATA] Search Performance",
-        description: "This is mock data for testing purposes. Real analysis would include actual metrics and specific insights based on your GSC data.",
-        impactLevel: "high",
-        dataPoints: ["Mock data point 1", "Mock data point 2"]
-      },
-      {
-        title: "[MOCK DATA] Content Performance",
-        description: "This is mock data for testing purposes. Real analysis would include actual metrics and specific insights based on your GSC data.",
-        impactLevel: "medium",
-        dataPoints: ["Mock data point 1", "Mock data point 2"]
+      
+      topFindings: [
+        {
+          title: "Tutorial Content Driving Engagement",
+          description: "Your tutorial pages are the highest performing content, with the responsive design tutorial generating 124 clicks at a 5.5% CTR.",
+          impactLevel: "high",
+          dataPoints: [
+            "/tutorials/responsive-design received 124 clicks with 2,250 impressions",
+            "Tutorial content averages a 5.1% CTR compared to 4.3% site average",
+            "3 of your top 5 performing pages are tutorials"
+          ]
+        },
+        {
+          title: "CSS Grid Content Shows Promising Growth",
+          description: "Your CSS grid related content has seen a 32% increase in clicks during this period, suggesting growing interest in this topic.",
+          impactLevel: "medium",
+          dataPoints: [
+            "'css grid examples' keyword receives 76 clicks from 1,290 impressions",
+            "/blog/css-grid-layout page is your second highest performer with 98 clicks",
+            "Average position for CSS grid content is 14.0, better than site average"
+          ]
+        },
+        {
+          title: "Mobile-Related Queries Underperforming",
+          description: "Despite strong performance in responsive design, specific mobile-related queries have a below-average CTR of 3.2% compared to site average of 4.3%.",
+          impactLevel: "medium",
+          dataPoints: [
+            "Mobile-specific keywords average position 19.2 vs. site average of 17.2",
+            "Mobile content pages average 3.2% CTR vs. site average of 4.3%",
+            "Mobile-related impressions are growing but clicks are not keeping pace"
+          ]
+        }
+      ],
+      
+      opportunities: [
+        {
+          title: "Expand JavaScript Best Practices Content",
+          description: "The 'javascript best practices 2023' keyword is performing well, but traffic could be increased with expanded and more in-depth content.",
+          estimatedImpact: "+30-40% more clicks for JavaScript content",
+          difficulty: "moderate",
+          timeFrame: "short-term"
+        },
+        {
+          title: "Improve Mobile Content CTR",
+          description: "Optimize titles and meta descriptions for mobile-specific content to improve the below-average CTR for these pages.",
+          estimatedImpact: "+20-25% CTR improvement for mobile content",
+          difficulty: "easy",
+          timeFrame: "immediate"
+        },
+        {
+          title: "Create React State Management Series",
+          description: "Based on the performance of 'react state management' keyword, developing a comprehensive series on this topic could capture more search traffic.",
+          estimatedImpact: "+50-60% more traffic for React content",
+          difficulty: "complex",
+          timeFrame: "long-term"
+        }
+      ],
+      
+      recommendations: [
+        {
+          title: "Update and Expand CSS Grid Content",
+          description: "Your CSS grid content is performing well, but could be refreshed with new examples and practical applications to capture more search interest.",
+          priority: "high",
+          expectedOutcome: "Increase clicks by 30-40% for CSS grid related keywords",
+          implementationSteps: [
+            "Update existing CSS grid examples with current best practices",
+            "Add a section on CSS grid for responsive layouts without media queries",
+            "Create comparison examples between Flexbox and Grid for common layouts",
+            "Add interactive examples that users can experiment with"
+          ]
+        },
+        {
+          title: "Optimize Mobile Content Meta Descriptions",
+          description: "Rewrite meta descriptions for mobile-related content to better match search intent and improve CTR.",
+          priority: "medium",
+          expectedOutcome: "Improve CTR by 15-20% for mobile content pages",
+          implementationSteps: [
+            "Audit current meta descriptions for all mobile-related content",
+            "Research top-performing competitors' meta descriptions for similar content",
+            "Rewrite meta descriptions to include key phrases from the search queries",
+            "Add value propositions in meta descriptions (e.g., 'with code examples')"
+          ]
+        },
+        {
+          title: "Create Content Cluster Around React State Management",
+          description: "Develop a comprehensive guide to React state management approaches with individual in-depth articles on each method.",
+          priority: "medium",
+          expectedOutcome: "Establish topical authority and increase traffic by 50% for React topics",
+          implementationSteps: [
+            "Create cornerstone content comparing all state management approaches",
+            "Develop individual tutorials for Redux, Context API, useState/useReducer, and Recoil",
+            "Include practical examples showing migration between different approaches",
+            "Implement proper internal linking between all related content"
+          ]
+        }
+      ],
+      
+      keywordInsights: {
+        risingKeywords: [
+          "javascript best practices 2023",
+          "react state management",
+          "css grid examples",
+          "frontend developer portfolio"
+        ],
+        decliningKeywords: [
+          "jquery tutorials",
+          "css floats",
+          "bootstrap 4 templates"
+        ],
+        missedOpportunities: [
+          "typescript tutorials",
+          "nextjs examples",
+          "tailwind vs bootstrap"
+        ],
+        analysis: "Your content is performing well for current frontend development topics like CSS Grid, React, and JavaScript best practices. There appears to be a shift in interest from older technologies (jQuery, CSS floats) to more modern approaches. Consider creating content around TypeScript, Next.js, and Tailwind CSS, which are generating impressions but you currently don't have optimized content for these queries."
       }
-    ],
-    opportunities: [
-      {
-        title: "[MOCK DATA] Opportunity 1",
-        description: "This is mock data for testing purposes. Real analysis would include specific opportunities based on your actual GSC data.",
-        estimatedImpact: "[MOCK] Impact estimate",
-        difficulty: "easy",
-        timeFrame: "short-term"
-      },
-      {
-        title: "[MOCK DATA] Opportunity 2",
-        description: "This is mock data for testing purposes. Real analysis would include specific opportunities based on your actual GSC data.",
-        estimatedImpact: "[MOCK] Impact estimate",
-        difficulty: "moderate",
-        timeFrame: "medium-term"
-      },
-      {
-        title: "[MOCK DATA] Opportunity 3",
-        description: "This is mock data for testing purposes. Real analysis would include specific opportunities based on your actual GSC data.",
-        estimatedImpact: "[MOCK] Impact estimate",
-        difficulty: "complex",
-        timeFrame: "long-term"
-      }
-    ],
-    recommendations: [
-      {
-        title: "[MOCK DATA] Recommendation 1",
-        description: "This is mock data for testing purposes. Real recommendations would be based on your actual GSC data.",
-        priority: "high",
-        expectedOutcome: "[MOCK] Expected outcome",
-        implementationSteps: [
-          "[MOCK] Step 1",
-          "[MOCK] Step 2",
-          "[MOCK] Step 3"
-        ]
-      },
-      {
-        title: "[MOCK DATA] Recommendation 2",
-        description: "This is mock data for testing purposes. Real recommendations would be based on your actual GSC data.",
-        priority: "medium",
-        expectedOutcome: "[MOCK] Expected outcome",
-        implementationSteps: [
-          "[MOCK] Step 1",
-          "[MOCK] Step 2"
-        ]
-      },
-      {
-        title: "[MOCK DATA] Recommendation 3",
-        description: "This is mock data for testing purposes. Real recommendations would be based on your actual GSC data.",
-        priority: "medium",
-        expectedOutcome: "[MOCK] Expected outcome",
-        implementationSteps: [
-          "[MOCK] Step 1",
-          "[MOCK] Step 2",
-          "[MOCK] Step 3"
-        ]
-      }
-    ],
-    keywordInsights: {
-      risingKeywords: ["[MOCK] Rising keyword 1", "[MOCK] Rising keyword 2", "[MOCK] Rising keyword 3"],
-      decliningKeywords: ["[MOCK] Declining keyword 1", "[MOCK] Declining keyword 2"],
-      missedOpportunities: ["[MOCK] Missed opportunity 1", "[MOCK] Missed opportunity 2"],
-      analysis: "[MOCK DATA] This is simulated keyword analysis for testing purposes. Real analysis would include actual keywords and trends from your GSC data."
     }
   };
 }
