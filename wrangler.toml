@@ -9,6 +9,7 @@ route = "api.analytics.k-o.pro/*"
 [vars]
 FRONTEND_URL = "https://analytics.k-o.pro"
 GOOGLE_CLIENT_ID = "724601444957-h1sofo90i307cjln4ds6jbdo601t314m.apps.googleusercontent.com"
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 
 # Replace with actual IDs
 [[kv_namespaces]]
